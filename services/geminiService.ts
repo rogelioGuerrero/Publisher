@@ -1,0 +1,263 @@
+
+import { GoogleGenAI, Modality } from "@google/genai";
+import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings } from "../types";
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// --- HELPER: Convert Raw PCM to WAV Blob URL for playback ---
+const pcmToWavBlob = (rawBase64: string, sampleRate: number = 24000): string => {
+  const binaryString = atob(rawBase64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // PCM data is 16-bit integers (Little Endian)
+  const dataLen = bytes.length;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const wavHeader = new ArrayBuffer(44);
+  const view = new DataView(wavHeader);
+
+  // RIFF chunk descriptor
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataLen, true);
+  writeString(view, 8, 'WAVE');
+  // fmt sub-chunk
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+  view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  // data sub-chunk
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataLen, true);
+
+  const wavBytes = new Uint8Array(wavHeader.byteLength + dataLen);
+  wavBytes.set(new Uint8Array(wavHeader), 0);
+  wavBytes.set(bytes, 44);
+
+  const blob = new Blob([wavBytes], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+};
+
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+// --- 1. TEXT GENERATION (WITH SEARCH OR FILE) ---
+export const generateNewsContent = async (
+    input: string, 
+    mode: 'topic' | 'document', 
+    file: UploadedFile | null,
+    language: Language,
+    length: ArticleLength,
+    settings: AdvancedSettings
+): Promise<{ 
+    title: string, 
+    content: string, 
+    sources: NewsSource[], 
+    imagePrompt: string,
+    keywords: string[],
+    metaDescription: string
+}> => {
+  try {
+    let contents: any[] = [];
+    let tools: any[] = [];
+    
+    const langNames = { 'es': 'Spanish', 'en': 'English', 'fr': 'French', 'pt': 'Portuguese', 'de': 'German' };
+    const targetLang = langNames[language];
+    
+    const lengthGuide = { 'short': 'approx 300 words', 'medium': 'approx 600 words', 'long': 'approx 1000 words' };
+
+    // Construct complex prompt based on settings
+    const systemPrompt = `You are a world-class journalist engine. 
+    Target Language: ${targetLang}.
+    Target Length: ${lengthGuide[length]}.
+    
+    STYLE CONFIGURATION:
+    - Tone: ${settings.tone.toUpperCase()}
+    - Target Audience: ${settings.audience.toUpperCase()}
+    
+    Task: Write a news article following these constraints.
+    
+    Structure the response with these EXACT separators:
+    |||HEADLINE|||
+    (Write the catchy headline here)
+    |||BODY|||
+    (Write the article body in Markdown here. Use H3 for subheaders.)
+    |||IMAGE_PROMPT|||
+    (Write a highly detailed English prompt for an image generator. It must vividly describe the main subject, scene, or metaphor of the article based on the content you just wrote. Include specific details about the environment, lighting, color palette, and mood to match the article's tone. Style constraint: ${settings.visualStyle})
+    |||METADATA|||
+    (Provide a valid JSON object with "keywords" (array of strings) and "metaDescription" (string))`;
+
+    if (mode === 'document' && file) {
+        // Document Analysis Mode
+        contents = [
+            { inlineData: { mimeType: file.mimeType, data: file.data } },
+            { text: `${systemPrompt}\n\nSource Material Provided. Instruction: ${input || "Create a story based on this document."}` }
+        ];
+    } else {
+        // Topic Search Mode
+        let searchContext = `Topic: "${input}".`;
+        
+        // TimeFrame
+        if (settings.timeFrame !== 'any') {
+            searchContext += ` Focus on events from the last ${settings.timeFrame}.`;
+        }
+
+        // Region Logic
+        const regionInstructions = {
+            'world': 'Use global sources.',
+            'us': 'Prioritize US-based Tier 1 sources (e.g., NYT, WSJ, Washington Post). Ignore derivative content.',
+            'eu': 'Prioritize European sources (e.g., BBC, DW, Le Monde, El Pais).',
+            'latam': 'Prioritize Latin American sources.',
+            'asia': 'Prioritize Asian sources.'
+        };
+        searchContext += ` ${regionInstructions[settings.sourceRegion]}`;
+
+        // Preferred Sources (Domains)
+        if (settings.preferredDomains.length > 0) {
+            searchContext += ` IMPORTANT: You MUST prioritize information from these specific domains: ${settings.preferredDomains.join(', ')}.`;
+        }
+
+        // Blocked Sources
+        if (settings.blockedDomains.length > 0) {
+            searchContext += ` Do NOT use information from these domains: ${settings.blockedDomains.join(', ')}.`;
+        }
+
+        // Verified Only
+        if (settings.verifiedSourcesOnly) {
+            searchContext += ` STRICTLY use only verified, authoritative, and reputable news sources. Do not use blogs, forums, or tabloid sites.`;
+        }
+
+        contents = [
+            { text: `${systemPrompt}\n\n${searchContext}` }
+        ];
+        tools = [{ googleSearch: {} }];
+    }
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contents,
+      config: {
+        tools: tools.length > 0 ? tools : undefined,
+      }
+    });
+
+    const fullText = response.text || "";
+    
+    // Robust Parsing
+    const parts = fullText.split(/\|\|\|[A-Z_]+\|\|\|/);
+    
+    const title = parts[1]?.trim() || "Noticia Generada";
+    const content = parts[2]?.trim() || fullText;
+    const imagePrompt = parts[3]?.trim() || `Editorial illustration representing ${input}, detailed, ${settings.visualStyle} style`;
+    
+    let keywords: string[] = [];
+    let metaDescription = "";
+    
+    try {
+        if (parts[4]) {
+            const jsonStr = parts[4].trim().replace(/```json|```/g, '');
+            const metadata = JSON.parse(jsonStr);
+            keywords = metadata.keywords || [];
+            metaDescription = metadata.metaDescription || "";
+        }
+    } catch (e) {
+        console.warn("Failed to parse metadata JSON", e);
+    }
+
+    // Extract Grounding Metadata
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const sources: NewsSource[] = chunks
+      .filter((c: any) => c.web?.uri && c.web?.title)
+      .map((c: any) => ({ title: c.web.title, uri: c.web.uri }));
+
+    const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
+    if (mode === 'document' && file) {
+        uniqueSources.push({ title: file.name, uri: '#' });
+    }
+
+    return {
+      title,
+      content,
+      imagePrompt,
+      sources: uniqueSources,
+      keywords,
+      metaDescription
+    };
+  } catch (error) {
+    console.error("Error generating text:", error);
+    throw error;
+  }
+};
+
+// --- 2. IMAGE GENERATION ---
+export const generateNewsImages = async (prompt: string): Promise<string[]> => {
+  try {
+    const response = await ai.models.generateImages({
+      model: 'imagen-4.0-generate-001',
+      prompt: prompt,
+      config: {
+        numberOfImages: 3,
+        aspectRatio: '16:9',
+        outputMimeType: 'image/jpeg'
+      }
+    });
+
+    if (!response.generatedImages) throw new Error("No images generated");
+    
+    return response.generatedImages.map(img => img.image.imageBytes);
+  } catch (error) {
+    console.error("Error generating images:", error);
+    return [];
+  }
+};
+
+// --- 3. AUDIO GENERATION (TTS) ---
+export const generateNewsAudio = async (text: string, language: Language): Promise<string> => {
+  try {
+    // Updated Voice Mapping for "Less Robot" feel
+    const voiceMap: Record<Language, string> = {
+        'es': 'Aoede', // Much smoother, more natural for Spanish than Puck
+        'en': 'Fenrir', // Balanced, professional
+        'fr': 'Charon',
+        'pt': 'Aoede', 
+        'de': 'Fenrir'
+    };
+
+    const voiceName = voiceMap[language] || 'Aoede';
+    // Limit text for demo purposes
+    const safeText = text.length > 4000 ? text.substring(0, 4000) + "..." : text;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: safeText }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voiceName },
+            },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("No audio generated");
+    
+    return pcmToWavBlob(base64Audio, 24000); 
+  } catch (error) {
+    console.error("Error generating audio:", error);
+    throw error;
+  }
+};

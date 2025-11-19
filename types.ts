@@ -1,0 +1,93 @@
+
+export interface Message {
+    role: 'user' | 'model';
+    text: string;
+    timestamp: number;
+}
+
+export enum LoadingState {
+    IDLE = 'IDLE',
+    LOADING = 'LOADING',
+    SUCCESS = 'SUCCESS',
+    ERROR = 'ERROR'
+}
+
+export interface NewsSource {
+    title: string;
+    uri: string;
+}
+
+export interface MediaItem {
+    type: 'image' | 'video';
+    data: string; // Base64 or URL
+    mimeType: string;
+}
+
+export interface NewsArticle {
+    id: string; // Unique ID for history
+    createdAt: number;
+    topic: string;
+    title: string;
+    content: string;
+    sources: NewsSource[];
+    media: MediaItem[]; 
+    audioUrl?: string;
+    language: Language;
+    // SEO Metadata
+    keywords: string[];
+    metaDescription: string;
+    // Generation prompt for consistency
+    imagePrompt: string;
+}
+
+export enum GenerationStep {
+    INPUT = 0,
+    TEXT_SEARCH = 1,
+    TEXT_REVIEW = 2, // Review text before generating media
+    MEDIA_REVIEW = 3, // Review/upload media
+    COMPLETE = 4
+}
+
+export type InputMode = 'topic' | 'document';
+
+export type Language = 'es' | 'en' | 'fr' | 'pt' | 'de';
+
+export type ArticleLength = 'short' | 'medium' | 'long';
+
+// --- NEW ADVANCED SETTINGS TYPES ---
+
+export type ArticleTone = 'objective' | 'editorial' | 'satirical' | 'sensational' | 'explanatory';
+
+export type ArticleAudience = 'general' | 'expert' | 'investor';
+
+export type TimeFrame = '24h' | 'week' | 'month' | 'any';
+
+export type VisualStyle = 'photorealistic' | 'illustration' | 'cyberpunk' | 'minimalist' | 'data';
+
+export type SourceRegion = 'world' | 'us' | 'eu' | 'latam' | 'asia';
+
+export interface AdvancedSettings {
+    tone: ArticleTone;
+    audience: ArticleAudience;
+    timeFrame: TimeFrame;
+    visualStyle: VisualStyle;
+    
+    // Source Control
+    sourceRegion: SourceRegion;
+    preferredDomains: string[]; // Chips
+    blockedDomains: string[];   // Chips
+    verifiedSourcesOnly: boolean;
+}
+
+export interface UploadedFile {
+    data: string; // Base64
+    mimeType: string;
+    name: string;
+}
+
+declare global {
+    interface AIStudio {
+        hasSelectedApiKey: () => Promise<boolean>;
+        openSelectKey: () => Promise<void>;
+    }
+}
