@@ -207,7 +207,8 @@ export const generateNewsContent = async (
       .filter((c: any) => c.web?.uri && c.web?.title)
       .map((c: any) => ({ title: c.web.title, uri: c.web.uri }));
 
-    const uniqueSources = Array.from(new Map(sources.map(s => [s.uri, s])).values());
+    // FIX: Deduplicate by title instead of URI to handle internal search links correctly.
+    const uniqueSources = Array.from(new Map(sources.map(s => [s.title, s])).values());
     if (mode === 'document' && file) {
         uniqueSources.push({ title: file.name, uri: '#' });
     }
