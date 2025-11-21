@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { generateNewsContent, generateNewsImages, generateNewsAudio, generateSocialPost } from './services/geminiService';
 import { searchPexels } from './services/pexelsService';
@@ -61,6 +60,12 @@ const LENGTHS: { code: ArticleLength; label: string; desc: string }[] = [
     { code: 'short', label: 'Breve', desc: '~300' },
     { code: 'medium', label: 'Estándar', desc: '~600' },
     { code: 'long', label: 'Profundo', desc: '~1000' },
+];
+
+const LANGUAGES: { code: Language; label: string }[] = [
+    { code: 'es', label: 'Español' },
+    { code: 'en', label: 'Inglés' },
+    { code: 'fr', label: 'Francés' },
 ];
 
 const PLACEHOLDERS = [
@@ -802,17 +807,17 @@ export const App: React.FC = () => {
                         <div className="grid grid-cols-2 gap-6 mb-6">
                             <div>
                                 <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Idioma</label>
-                                <select
-                                    value={selectedLanguage}
-                                    onChange={(e) => setSelectedLanguage(e.target.value as Language)}
-                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                >
-                                    <option value="es">Español</option>
-                                    <option value="en">English</option>
-                                    <option value="fr">Français</option>
-                                    <option value="pt">Português</option>
-                                    <option value="de">Deutsch</option>
-                                </select>
+                                <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-600">
+                                    {LANGUAGES.map(l => (
+                                        <button
+                                            key={l.code}
+                                            onClick={() => setSelectedLanguage(l.code)}
+                                            className={`flex-1 py-2 text-xs rounded-md transition-all font-medium ${selectedLanguage === l.code ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                        >
+                                            {l.label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Longitud</label>
@@ -1124,7 +1129,7 @@ export const App: React.FC = () => {
                                 >
                                     {item.type === 'video' ? (
                                         <video 
-                                            ref={el => videoRefs.current[idx] = el}
+                                            ref={(el) => { videoRefs.current[idx] = el; }}
                                             src={getMediaSrc(item)} 
                                             className="w-full h-full object-cover"
                                             loop
