@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings } from "../types";
+import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -53,6 +53,19 @@ function writeString(view: DataView, offset: number, string: string) {
   }
 }
 
+// --- HELPER: Convert Blob to Base64 ---
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+        const base64String = (reader.result as string).split(',')[1];
+        resolve(base64String);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
 // --- 1. TEXT GENERATION (WITH SEARCH OR FILE) ---
 export const generateNewsContent = async (
     input: string, 
@@ -86,6 +99,12 @@ export const generateNewsContent = async (
     STYLE CONFIGURATION:
     - Tone: ${settings.tone.toUpperCase()}
     - Target Audience: ${settings.audience.toUpperCase()}
+    - Editorial Focus (Angle): ${settings.focus.toUpperCase()}
+    
+    CONTENT REQUIREMENTS (STRICT):
+    ${settings.includeQuotes ? '- MUST include direct quotes (with attribution) from relevant figures or documents.' : ''}
+    ${settings.includeStats ? '- MUST include specific data, statistics, percentages, or financial figures.' : ''}
+    ${settings.includeCounterArguments ? '- MUST include a counter-argument, alternative perspective, or risks involved to ensure balance.' : ''}
     
     Task: Write a news article following these constraints.
     
@@ -155,23 +174,29 @@ export const generateNewsContent = async (
 
     const fullText = response.text || "";
     
-    // Robust Parsing
+    // Robust Parsing with new sections
     const parts = fullText.split(/\|\|\|[A-Z_]+\|\|\|/);
     
+    // Indices shift due to new sections:
+    // 0: Empty
+    // 1: HEADLINE
+    // 2: BODY
+    // 3: IMAGE_PROMPT
+    // 4: METADATA
+
     const title = parts[1]?.trim() || "Noticia Generada";
     const content = parts[2]?.trim() || fullText;
     const imagePrompt = parts[3]?.trim() || `Editorial illustration representing ${input}, detailed, ${settings.visualStyle} style`;
+    const metadataRaw = parts[4]?.trim() || "{}";
     
     let keywords: string[] = [];
     let metaDescription = "";
     
     try {
-        if (parts[4]) {
-            const jsonStr = parts[4].trim().replace(/```json|```/g, '');
-            const metadata = JSON.parse(jsonStr);
-            keywords = metadata.keywords || [];
-            metaDescription = metadata.metaDescription || "";
-        }
+        const jsonStr = metadataRaw.replace(/```json|```/g, '');
+        const metadata = JSON.parse(jsonStr);
+        keywords = metadata.keywords || [];
+        metaDescription = metadata.metaDescription || "";
     } catch (e) {
         console.warn("Failed to parse metadata JSON", e);
     }
@@ -224,20 +249,29 @@ export const generateNewsImages = async (prompt: string): Promise<string[]> => {
 };
 
 // --- 3. AUDIO GENERATION (TTS) ---
-export const generateNewsAudio = async (text: string, language: Language): Promise<string> => {
+// Now aware of AdvancedSettings to pick the right "Voice Persona"
+export const generateNewsAudio = async (text: string, language: Language, settings: AdvancedSettings): Promise<string> => {
   try {
-    // Updated Voice Mapping for "Less Robot" feel
-    const voiceMap: Record<Language, string> = {
-        'es': 'Aoede', // Much smoother, more natural for Spanish than Puck
-        'en': 'Fenrir', // Balanced, professional
-        'fr': 'Charon',
-        'pt': 'Aoede', 
-        'de': 'Fenrir'
+    let selectedVoice = 'Aoede'; // Default Safe option
+
+    // 1. Define Voice Personas based on Tone
+    const voiceByTone: Record<ArticleTone, string> = {
+        'objective': 'Fenrir',   // Serious news anchor
+        'corporate': 'Fenrir',   // Authoritative
+        'editorial': 'Aoede',    // Opinionated but smooth
+        'narrative': 'Aoede',    // Storyteller
+        'explanatory': 'Zephyr', // Helpful/Clear
+        'sensational': 'Puck',   // Energetic/Urgent
+        'satirical': 'Puck'      // Playful
     };
 
-    const voiceName = voiceMap[language] || 'Aoede';
-    // Limit text for demo purposes
-    const safeText = text.length > 4000 ? text.substring(0, 4000) + "..." : text;
+    // 2. Apply selection logic
+    if (settings && settings.tone) {
+        selectedVoice = voiceByTone[settings.tone] || 'Aoede';
+    }
+
+    // Increased limit to 40,000 characters to prevent truncation
+    const safeText = text.length > 40000 ? text.substring(0, 40000) + "..." : text;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
@@ -246,7 +280,7 @@ export const generateNewsAudio = async (text: string, language: Language): Promi
         responseModalities: [Modality.AUDIO],
         speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voiceName },
+              prebuiltVoiceConfig: { voiceName: selectedVoice },
             },
         },
       },
@@ -260,4 +294,50 @@ export const generateNewsAudio = async (text: string, language: Language): Promi
     console.error("Error generating audio:", error);
     throw error;
   }
+};
+
+// --- 4. SOCIAL MEDIA POST GENERATOR ---
+export const generateSocialPost = async (article: NewsArticle, platform: 'x' | 'linkedin' | 'facebook'): Promise<string> => {
+    try {
+        const prompt = `
+        Role: Expert Social Media Manager.
+        Task: Convert the following news article into a viral post for ${platform === 'x' ? 'X (Twitter)' : platform === 'linkedin' ? 'LinkedIn' : 'Facebook'}.
+        Language: ${article.language === 'en' ? 'English' : 'Spanish'} (Match article language).
+        
+        ARTICLE TITLE: ${article.title}
+        ARTICLE CONTENT (Summary): ${article.metaDescription}
+        
+        REQUIREMENTS FOR X (TWITTER):
+        - STRICT LIMIT: Maximum 2 tweets. Ideally just 1 powerful tweet.
+        - Max 280 characters per tweet.
+        - Use 2 relevant viral hashtags max.
+        - Tone: Urgent, provocative, concise.
+        - Structure: Hook + Core Insight + Link placeholder.
+        
+        REQUIREMENTS FOR LINKEDIN:
+        - Professional, insightful structure.
+        - Use a "Hook" headline.
+        - Use bullet points for key insights.
+        - End with a thought-provoking question to drive engagement.
+        
+        REQUIREMENTS FOR FACEBOOK:
+        - Conversational, community-focused, and engaging tone.
+        - Length: Medium (1-2 paragraphs). Facebook allows more text than X.
+        - Focus on the "human story" or impact.
+        - Ask a question to the followers to encourage comments.
+        - Use relevant emojis.
+        
+        IMPORTANT: Return ONLY the text of the post. Do not include labels like "Here is the post:" or markdown headers like "### Post". Just the content ready to copy/paste.
+        `;
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+
+        return response.text || "Error generando post.";
+    } catch (error) {
+        console.error("Error generating social post:", error);
+        return "No se pudo generar el post para redes sociales.";
+    }
 };

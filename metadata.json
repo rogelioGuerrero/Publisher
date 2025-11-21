@@ -1,5 +1,5 @@
 {
-  "name": "Gemini Key Explainer",
-  "description": "Una aplicación educativa y de demostración que explica cómo se gestiona la API Key en este entorno y permite probar la conexión con Gemini 2.5 Flash.",
+  "name": "GenerNews",
+  "description": "Creación de contenido",
   "requestFramePermissions": []
 }

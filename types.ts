@@ -23,6 +23,13 @@ export interface MediaItem {
     mimeType: string;
 }
 
+export interface ChartData {
+    title: string;
+    labels: string[];
+    values: number[];
+    unit?: string;
+}
+
 export interface NewsArticle {
     id: string; // Unique ID for history
     createdAt: number;
@@ -38,6 +45,7 @@ export interface NewsArticle {
     metaDescription: string;
     // Generation prompt for consistency
     imagePrompt: string;
+    chartData?: ChartData;
 }
 
 export enum GenerationStep {
@@ -56,9 +64,11 @@ export type ArticleLength = 'short' | 'medium' | 'long';
 
 // --- NEW ADVANCED SETTINGS TYPES ---
 
-export type ArticleTone = 'objective' | 'editorial' | 'satirical' | 'sensational' | 'explanatory';
+export type ArticleTone = 'objective' | 'editorial' | 'corporate' | 'narrative' | 'satirical' | 'sensational' | 'explanatory';
 
-export type ArticleAudience = 'general' | 'expert' | 'investor';
+export type ArticleAudience = 'general' | 'expert' | 'investor' | 'executive' | 'academic';
+
+export type ArticleFocus = 'general' | 'economic' | 'political' | 'social' | 'technological';
 
 export type TimeFrame = '24h' | 'week' | 'month' | 'any';
 
@@ -69,6 +79,7 @@ export type SourceRegion = 'world' | 'us' | 'eu' | 'latam' | 'asia';
 export interface AdvancedSettings {
     tone: ArticleTone;
     audience: ArticleAudience;
+    focus: ArticleFocus; 
     timeFrame: TimeFrame;
     visualStyle: VisualStyle;
     
@@ -77,6 +88,11 @@ export interface AdvancedSettings {
     preferredDomains: string[]; // Chips
     blockedDomains: string[];   // Chips
     verifiedSourcesOnly: boolean;
+
+    // Credibility Elements
+    includeQuotes: boolean; 
+    includeStats: boolean; 
+    includeCounterArguments: boolean; 
 }
 
 export interface UploadedFile {
