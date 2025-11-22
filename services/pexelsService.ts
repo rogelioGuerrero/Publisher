@@ -1,17 +1,24 @@
 
 import { MediaItem } from "../types";
 
-const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY;
+let pexelsApiKey = import.meta.env.VITE_PEXELS_API_KEY || "";
 
-if (!PEXELS_API_KEY) {
-    throw new Error("Missing VITE_PEXELS_API_KEY. Did you set it in your environment file?");
-}
+export const setPexelsApiKey = (key: string) => {
+    pexelsApiKey = key;
+};
+
+const requirePexelsKey = () => {
+    if (!pexelsApiKey) {
+        throw new Error("Pexels API Key no configurada. Añade tu clave en Configuración del Proyecto.");
+    }
+    return pexelsApiKey;
+};
 
 export const searchPexels = async (query: string, type: 'image' | 'video' | 'mixed', count: number = 2): Promise<MediaItem[]> => {
     try {
-        const results: MediaItem[] = [];
+        const key = requirePexelsKey();
         const headers = {
-            'Authorization': PEXELS_API_KEY
+            'Authorization': key
         };
 
         // Helper to fetch images
@@ -55,6 +62,6 @@ export const searchPexels = async (query: string, type: 'image' | 'video' | 'mix
 
     } catch (error) {
         console.error("Pexels API Error:", error);
-        return [];
+        throw error instanceof Error ? error : new Error('Error usando la Pexels API');
     }
 };

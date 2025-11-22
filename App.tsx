@@ -15,8 +15,11 @@ import {
   ArticleLength, 
   AdvancedSettings, 
   MediaItem, 
-  SourceGroup
+  SourceGroup,
+  ProjectConfig
 } from './types';
+import { setGeminiApiKey } from './services/geminiService';
+import { setPexelsApiKey } from './services/pexelsService';
 import { PLACEHOLDERS, getRegionPreferredDomains } from './constants';
 
 import { Header } from './components/Header';
@@ -27,6 +30,7 @@ import { StepComplete } from './components/StepComplete';
 import { HistorySidebar } from './components/HistorySidebar';
 import { EmbedModal } from './components/EmbedModal';
 import { SocialModal } from './components/SocialModal';
+import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 
 import './styles/main.css';
 
@@ -147,6 +151,38 @@ export const App: React.FC = () => {
   const [history, setHistory] = useState<NewsArticle[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
+  const [projectConfig, setProjectConfig] = useState<ProjectConfig>(() => {
+    if (typeof window === 'undefined') {
+      return {
+        geminiApiKey: '',
+        pexelsApiKey: '',
+        preferredDomains: getRegionPreferredDomains('world'),
+        blockedDomains: []
+      };
+    }
+    try {
+      const stored = localStorage.getItem('newsgen_project_config');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          geminiApiKey: parsed.geminiApiKey || '',
+          pexelsApiKey: parsed.pexelsApiKey || '',
+          preferredDomains: parsed.preferredDomains || getRegionPreferredDomains('world'),
+          blockedDomains: parsed.blockedDomains || []
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to parse project config', e);
+    }
+    return {
+      geminiApiKey: '',
+      pexelsApiKey: '',
+      preferredDomains: getRegionPreferredDomains('world'),
+      blockedDomains: []
+    };
+  });
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window === 'undefined') return 'dark';
     return (localStorage.getItem('newsgen_theme') as 'light' | 'dark') || 'dark';
@@ -218,6 +254,20 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (projectConfig.geminiApiKey) {
+      setGeminiApiKey(projectConfig.geminiApiKey);
+    }
+    if (projectConfig.pexelsApiKey) {
+      setPexelsApiKey(projectConfig.pexelsApiKey);
+    }
+    setAdvancedSettings(prev => ({
+      ...prev,
+      preferredDomains: projectConfig.preferredDomains,
+      blockedDomains: projectConfig.blockedDomains
+    }));
+  }, [projectConfig]);
+
+  useEffect(() => {
     if (currentStep !== GenerationStep.COMPLETE || !article?.media || article.media.length === 0) return;
     
     const currentItem = article.media[currentMediaIndex];
@@ -272,6 +322,12 @@ export const App: React.FC = () => {
     setIncludeAudio(true); 
     setShowSocialModal(false);
     setSocialContentMap({ x: '', linkedin: '', facebook: '' });
+  };
+
+  const handleSaveProjectConfig = (config: ProjectConfig) => {
+    setProjectConfig(config);
+    localStorage.setItem('newsgen_project_config', JSON.stringify(config));
+    setShowProjectSettings(false);
   };
 
   const handleModifySearch = () => {
@@ -711,8 +767,8 @@ export const App: React.FC = () => {
           theme={theme} 
           onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} 
           onReset={handleReset} 
-          onOpenKeySettings={handleOpenKeySettings} 
-          onShowHistory={() => setShowHistory(true)} 
+          onShowHistory={() => setShowHistory(true)}
+          onLogoSecretClick={() => setShowProjectSettings(true)} 
       />
 
       <main className="max-w-5xl mx-auto px-6 py-8">
@@ -848,6 +904,13 @@ export const App: React.FC = () => {
             shareUrl={getShareUrl()} 
         />
       )}
+
+      <ProjectSettingsModal 
+          isOpen={showProjectSettings} 
+          initialConfig={projectConfig} 
+          onClose={() => setShowProjectSettings(false)} 
+          onSave={handleSaveProjectConfig} 
+      />
 
     </div>
   );

@@ -2,13 +2,20 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem } from "../types";
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+let geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+let ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 
-if (!GEMINI_API_KEY) {
-  throw new Error("Missing VITE_GEMINI_API_KEY. Did you set it in your environment file?");
-}
+export const setGeminiApiKey = (key: string) => {
+  geminiApiKey = key;
+  ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+};
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const requireAiClient = () => {
+  if (!ai) {
+    throw new Error("Gemini API Key no configurada. Abre la Configuración del Proyecto para agregarla.");
+  }
+  return ai;
+};
 
 // --- HELPER: Convert Raw PCM to WAV Blob URL for playback ---
 const pcmToWavBlob = (rawBase64: string, sampleRate: number = 24000): string => {
@@ -89,6 +96,7 @@ export const generateNewsContent = async (
     metaDescription: string
 }> => {
   try {
+    const client = requireAiClient();
     let contents: any[] = [];
     let tools: any[] = [];
     
@@ -170,7 +178,7 @@ export const generateNewsContent = async (
         tools = [{ googleSearch: {} }];
     }
 
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: contents,
       config: {
@@ -272,7 +280,8 @@ export const generateNewsContent = async (
 // --- 2. IMAGE GENERATION ---
 export const generateNewsImages = async (prompt: string): Promise<string[]> => {
   try {
-    const response = await ai.models.generateImages({
+    const client = requireAiClient();
+    const response = await client.models.generateImages({
       model: 'imagen-4.0-generate-001',
       prompt: prompt,
       config: {
@@ -295,6 +304,7 @@ export const generateNewsImages = async (prompt: string): Promise<string[]> => {
 // Now aware of AdvancedSettings to pick the right "Voice Persona"
 export const generateNewsAudio = async (text: string, language: Language, settings: AdvancedSettings): Promise<string> => {
   try {
+    const client = requireAiClient();
     let selectedVoice = 'Aoede'; // Default Safe option
 
     // 1. Define Voice Personas based on Tone
@@ -316,7 +326,7 @@ export const generateNewsAudio = async (text: string, language: Language, settin
     // Increased limit to 40,000 characters to prevent truncation
     const safeText = text.length > 40000 ? text.substring(0, 40000) + "..." : text;
 
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: safeText }] }],
       config: {
@@ -342,6 +352,7 @@ export const generateNewsAudio = async (text: string, language: Language, settin
 // --- 4. SOCIAL MEDIA POST GENERATOR ---
 export const generateSocialPost = async (article: NewsArticle, platform: 'x' | 'linkedin' | 'facebook'): Promise<string> => {
     try {
+        const client = requireAiClient();
         const prompt = `
         Role: Expert Social Media Manager.
         Task: Convert the following news article into a viral post for ${platform === 'x' ? 'X (Twitter)' : platform === 'linkedin' ? 'LinkedIn' : 'Facebook'}.
@@ -373,7 +384,7 @@ export const generateSocialPost = async (article: NewsArticle, platform: 'x' | '
         IMPORTANT: Return ONLY the text of the post. Do not include labels like "Here is the post:" or markdown headers like "### Post". Just the content ready to copy/paste.
         `;
         
-        const response = await ai.models.generateContent({
+        const response = await client.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt
         });

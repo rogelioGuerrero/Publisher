@@ -107,6 +107,13 @@ export interface SourceGroup {
     links: { title: string; uri: string }[];
 }
 
+export interface ProjectConfig {
+    geminiApiKey: string;
+    pexelsApiKey: string;
+    preferredDomains: string[];
+    blockedDomains: string[];
+}
+
 declare global {
     interface AIStudio {
         hasSelectedApiKey: () => Promise<boolean>;

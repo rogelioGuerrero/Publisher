@@ -22,7 +22,6 @@ interface StepMediaReviewProps {
     handleAddUrlMedia: () => void;
     includeAudio: boolean;
     setIncludeAudio: (v: boolean) => void;
-    onGenerateAudio: () => void;
     onFinalize: () => void;
 }
 
@@ -46,7 +45,6 @@ export const StepMediaReview: React.FC<StepMediaReviewProps> = ({
     handleAddUrlMedia,
     includeAudio,
     setIncludeAudio,
-    onGenerateAudio,
     onFinalize
 }) => {
     return (
@@ -133,7 +131,7 @@ export const StepMediaReview: React.FC<StepMediaReviewProps> = ({
             <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 mb-8 flex items-center justify-between">
                  <div>
                     <h4 className="font-medium text-white">Narración de Audio (TTS)</h4>
-                    <p className="text-xs text-slate-400">Generar versión de audio del artículo.</p>
+                    <p className="text-xs text-slate-400">Si el switch está activo, generaremos la voz automáticamente al publicar el artículo.</p>
                  </div>
                  <div className="flex items-center gap-4">
                      <label className="toggle-switch cursor-pointer">
@@ -142,7 +140,6 @@ export const StepMediaReview: React.FC<StepMediaReviewProps> = ({
                             <span className="toggle-thumb"></span>
                         </span>
                     </label>
-                    <button onClick={onGenerateAudio} className="btn btn-primary text-sm px-4 py-2">Generar</button>
                 </div>
             </div>
 
