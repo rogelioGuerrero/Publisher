@@ -2,7 +2,13 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+if (!GEMINI_API_KEY) {
+  throw new Error("Missing VITE_GEMINI_API_KEY. Did you set it in your environment file?");
+}
+
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // --- HELPER: Convert Raw PCM to WAV Blob URL for playback ---
 const pcmToWavBlob = (rawBase64: string, sampleRate: number = 24000): string => {
@@ -145,7 +151,7 @@ export const generateNewsContent = async (
 
         // Preferred Sources (Domains)
         if (settings.preferredDomains.length > 0) {
-            searchContext += ` IMPORTANT: You MUST prioritize information from these specific domains: ${settings.preferredDomains.join(', ')}.`;
+            searchContext += ` Give preference to these vetted domains when available: ${settings.preferredDomains.join(', ')}. You may still cite other reputable, well-sourced outlets if they strengthen the story.`;
         }
 
         // Blocked Sources

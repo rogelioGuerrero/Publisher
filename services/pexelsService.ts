@@ -1,7 +1,11 @@
 
 import { MediaItem } from "../types";
 
-const PEXELS_API_KEY = 'cn1L5H2haPcdyVqVVQHSiHv7cESwnxIbnFW5cTFes6BHwXjqcwqi0t4E';
+const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY;
+
+if (!PEXELS_API_KEY) {
+    throw new Error("Missing VITE_PEXELS_API_KEY. Did you set it in your environment file?");
+}
 
 export const searchPexels = async (query: string, type: 'image' | 'video' | 'mixed', count: number = 2): Promise<MediaItem[]> => {
     try {

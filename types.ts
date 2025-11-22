@@ -101,6 +101,12 @@ export interface UploadedFile {
     name: string;
 }
 
+export interface SourceGroup {
+    domain: string;
+    occurrences: number;
+    links: { title: string; uri: string }[];
+}
+
 declare global {
     interface AIStudio {
         hasSelectedApiKey: () => Promise<boolean>;
