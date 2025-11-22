@@ -1202,6 +1202,31 @@ export const App: React.FC = () => {
                     <div className="glass-panel p-6 rounded-xl sticky top-24">
                         <h3 className="font-bold text-lg mb-4">Acciones</h3>
                         
+                        {/* Navigation / Edit Controls */}
+                        <div className="grid grid-cols-2 gap-2 mb-4 pb-4 border-b border-slate-700/50">
+                            <button 
+                                onClick={() => setCurrentStep(GenerationStep.MEDIA_REVIEW)}
+                                className="flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-lg text-xs font-bold transition-colors"
+                                title="Volver a editar imágenes y videos"
+                            >
+                                ← Media
+                            </button>
+                            <button 
+                                onClick={() => setCurrentStep(GenerationStep.TEXT_REVIEW)}
+                                className="flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-lg text-xs font-bold transition-colors"
+                                title="Volver a revisar el texto"
+                            >
+                                ← Texto
+                            </button>
+                             <button 
+                                onClick={() => setCurrentStep(GenerationStep.INPUT)}
+                                className="col-span-2 flex items-center justify-center gap-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-2 rounded-lg text-xs font-bold transition-colors"
+                                title="Modificar tema y regenerar"
+                            >
+                                ↺ Modificar Búsqueda (Paso 1)
+                            </button>
+                        </div>
+                        
                         <div className="space-y-3">
                             <button onClick={() => handleOpenSocialModal('x')} className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
                                 <span className="text-xl">✨</span> Social Studio AI

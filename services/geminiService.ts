@@ -201,14 +201,50 @@ export const generateNewsContent = async (
         console.warn("Failed to parse metadata JSON", e);
     }
 
-    // Extract Grounding Metadata
+    // Extract Grounding Metadata with Robust Filtering
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const sources: NewsSource[] = chunks
-      .filter((c: any) => c.web?.uri && c.web?.title)
-      .map((c: any) => ({ title: c.web.title, uri: c.web.uri }));
+    
+    const rawSources = chunks
+      .map((c: any) => {
+          if (c.web?.uri && c.web?.title) {
+              return { title: c.web.title, uri: c.web.uri };
+          }
+          return null;
+      })
+      .filter((s: any) => s !== null);
 
-    // FIX: Deduplicate by title instead of URI to handle internal search links correctly.
-    const uniqueSources = Array.from(new Map(sources.map(s => [s.title, s])).values());
+    // Intelligent Deduplication & Filtering
+    const uniqueSources: NewsSource[] = [];
+    const seenUris = new Set<string>();
+    const seenTitles = new Set<string>();
+
+    for (const source of rawSources) {
+        // Filter out internal Google/Vertex links which are often technical artifacts
+        if (source.uri.includes('vertexaisearch') || source.uri.includes('google.com/search') || source.uri.includes('google.com/url')) {
+            continue;
+        }
+
+        // Normalize Title
+        let title = source.title.trim();
+        // If title looks like a URL or is too long, try to fallback to domain
+        if (title.includes('http') || title.includes('www.') || title.length > 100) {
+            try {
+                const hostname = new URL(source.uri).hostname;
+                title = hostname.replace('www.', '');
+            } catch (e) {
+                // Keep original if parsing fails
+            }
+        }
+
+        // Dedupe Logic: Must have unique URI AND unique Title to be added
+        // This prevents same-article-different-url AND same-url-duplicate-entry
+        if (!seenUris.has(source.uri) && !seenTitles.has(title)) {
+            seenUris.add(source.uri);
+            seenTitles.add(title);
+            uniqueSources.push({ title, uri: source.uri });
+        }
+    }
+
     if (mode === 'document' && file) {
         uniqueSources.push({ title: file.name, uri: '#' });
     }
