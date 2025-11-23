@@ -1,8 +1,15 @@
 import { MediaItem } from './types';
 
 export const getMediaSrc = (item: MediaItem) => {
-  if (item.data.startsWith('http') || item.data.startsWith('https') || item.data.startsWith('//')) {
-    return item.data;
+  const data = typeof item?.data === 'string' ? item.data : '';
+
+  if (data.startsWith('http') || data.startsWith('https') || data.startsWith('//')) {
+    return data;
   }
-  return `data:${item.mimeType};base64,${item.data}`;
+
+  if (!data) {
+    return '';
+  }
+
+  return `data:${item.mimeType};base64,${data}`;
 };

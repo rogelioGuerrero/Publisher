@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem } from "../types";
+import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem, RawSourceChunk } from "../types";
 
 let geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 let ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
@@ -15,6 +15,66 @@ const requireAiClient = () => {
     throw new Error("Gemini API Key no configurada. Abre la Configuración del Proyecto para agregarla.");
   }
   return ai;
+};
+
+// --- HELPER: Normalizar contenido a Markdown (sin HTML) ---
+const normalizeToMarkdown = (input: string): string => {
+  if (!input) return "";
+
+  let text = input.replace(/\r\n/g, "\n");
+
+  // 1) Convertir cabeceras HTML <h1>-<h6> a encabezados Markdown (#, ##, ###, ...)
+  text = text.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_match, level, inner) => {
+    const hashes = "#".repeat(Number(level));
+    return `${hashes} ${String(inner).trim()}`;
+  });
+
+  // 2) Saltos de línea explícitos
+  text = text.replace(/<br\s*\/?>(\s*)/gi, "\n");
+
+  // 3) Párrafos: quitar <p> de apertura y convertir </p> en doble salto de línea
+  text = text.replace(/<p[^>]*>/gi, "");
+  text = text.replace(/<\/p>/gi, "\n\n");
+
+  // 4) Negritas: <strong>/<b> -> **texto**
+  text = text.replace(/<(strong|b)[^>]*>([\s\S]*?)<\/(strong|b)>/gi, (_m, _tagOpen, inner) => {
+    return `**${String(inner).trim()}**`;
+  });
+
+  // 5) Cursiva: <em>/<i> -> *texto*
+  text = text.replace(/<(em|i)[^>]*>([\s\S]*?)<\/(em|i)>/gi, (_m, _tagOpen, inner) => {
+    return `*${String(inner).trim()}*`;
+  });
+
+  // 6) Enlaces: <a href="url">texto</a> -> [texto](url)
+  text = text.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_m, href, inner) => {
+    const label = String(inner).trim() || href;
+    return `[${label}](${href})`;
+  });
+
+  // 7) Citas: <blockquote> -> líneas con '>'
+  text = text.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_m, inner) => {
+    const raw = String(inner).replace(/\r\n/g, "\n");
+    return raw
+      .split(/\n/)
+      .map((line: string) => (line.trim() ? `> ${line.trim()}` : ""))
+      .join("\n");
+  });
+
+  // 8) Listas: <li> -> "- item"; quitar <ul>/<ol>
+  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_m, inner) => {
+    const content = String(inner).trim();
+    return content ? `- ${content}\n` : "";
+  });
+  text = text.replace(/<\/?(ul|ol)[^>]*>/gi, "");
+
+  // 9) Eliminar cualquier otra etiqueta HTML restante dejando solo el texto interno
+  text = text.replace(/<\/?[^>]+>/g, "");
+
+  // 10) Normalizar saltos de línea múltiples
+  text = text.replace(/\n{3,}/g, "\n\n");
+
+  return text.trim();
 };
 
 // --- HELPER: Convert Raw PCM to WAV Blob URL for playback ---
@@ -93,7 +153,8 @@ export const generateNewsContent = async (
     sources: NewsSource[], 
     imagePrompt: string,
     keywords: string[],
-    metaDescription: string
+    metaDescription: string,
+    rawSourceChunks: RawSourceChunk[]
 }> => {
   try {
     const client = requireAiClient();
@@ -114,6 +175,10 @@ export const generateNewsContent = async (
     - Tone: ${settings.tone.toUpperCase()}
     - Target Audience: ${settings.audience.toUpperCase()}
     - Editorial Focus (Angle): ${settings.focus.toUpperCase()}
+    
+    SOURCE QUALITY BASELINE (ALWAYS ENFORCED):
+    - When using external information or news coverage, always rely on reputable, well-known news outlets and official institutions.
+    - Avoid blogs, forums, tabloids, and low-credibility websites as primary sources.
     
     CONTENT REQUIREMENTS (STRICT):
     ${settings.includeQuotes ? '- MUST include direct quotes (with attribution) from relevant figures or documents.' : ''}
@@ -199,7 +264,8 @@ export const generateNewsContent = async (
     // 4: METADATA
 
     const title = parts[1]?.trim() || "Noticia Generada";
-    const content = parts[2]?.trim() || fullText;
+    const rawContent = parts[2]?.trim() || fullText;
+    const content = normalizeToMarkdown(rawContent);
     const imagePrompt = parts[3]?.trim() || `Editorial illustration representing ${input}, detailed, ${settings.visualStyle} style`;
     const metadataRaw = parts[4]?.trim() || "{}";
     
@@ -218,14 +284,21 @@ export const generateNewsContent = async (
     // Extract Grounding Metadata with Robust Filtering
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     
-    const rawSources = chunks
-      .map((c: any) => {
-          if (c.web?.uri && c.web?.title) {
-              return { title: c.web.title, uri: c.web.uri };
+    const rawSourceChunks: RawSourceChunk[] = chunks.map((c: any) => ({
+        title: c.web?.title || null,
+        uri: c.web?.uri || null,
+        snippet: c.web?.snippet || null,
+        provider: c.web?.provider || null
+    }));
+
+    const rawSources = rawSourceChunks
+      .map((chunk) => {
+          if (chunk.uri && chunk.title) {
+              return { title: chunk.title, uri: chunk.uri };
           }
           return null;
       })
-      .filter((s: any) => s !== null);
+      .filter((s): s is { title: string; uri: string } => s !== null);
 
     // Intelligent Deduplication & Filtering
     const uniqueSources: NewsSource[] = [];
@@ -233,29 +306,38 @@ export const generateNewsContent = async (
     const seenTitles = new Set<string>();
 
     for (const source of rawSources) {
-        // Filter out internal Google/Vertex links which are often technical artifacts
-        if (source.uri.includes('vertexaisearch') || source.uri.includes('google.com/search') || source.uri.includes('google.com/url')) {
+        const uri = source.uri;
+        const isVertexRedirect = uri.includes('vertexaisearch');
+        const isGoogleSearch = uri.includes('google.com/search') || uri.includes('google.com/url');
+
+        // Still drop generic Google search result URLs, as they are not good final citations
+        if (isGoogleSearch) {
             continue;
         }
 
-        // Normalize Title
+        // Normalize Title / Label
         let title = source.title.trim();
-        // If title looks like a URL or is too long, try to fallback to domain
-        if (title.includes('http') || title.includes('www.') || title.length > 100) {
-            try {
-                const hostname = new URL(source.uri).hostname;
-                title = hostname.replace('www.', '');
-            } catch (e) {
-                // Keep original if parsing fails
+
+        // For Vertex redirect URLs, we trust the title to represent the external site (often the domain),
+        // so we avoid normalizing it to the vertexaisearch hostname.
+        if (!isVertexRedirect) {
+            // If title looks like a URL or is too long, try to fallback to domain
+            if (title.includes('http') || title.includes('www.') || title.length > 100) {
+                try {
+                    const hostname = new URL(uri).hostname;
+                    title = hostname.replace('www.', '');
+                } catch (e) {
+                    // Keep original if parsing fails
+                }
             }
         }
 
         // Dedupe Logic: Must have unique URI AND unique Title to be added
         // This prevents same-article-different-url AND same-url-duplicate-entry
-        if (!seenUris.has(source.uri) && !seenTitles.has(title)) {
-            seenUris.add(source.uri);
+        if (!seenUris.has(uri) && !seenTitles.has(title)) {
+            seenUris.add(uri);
             seenTitles.add(title);
-            uniqueSources.push({ title, uri: source.uri });
+            uniqueSources.push({ title, uri });
         }
     }
 
@@ -269,7 +351,8 @@ export const generateNewsContent = async (
       imagePrompt,
       sources: uniqueSources,
       keywords,
-      metaDescription
+      metaDescription,
+      rawSourceChunks
     };
   } catch (error) {
     console.error("Error generating text:", error);

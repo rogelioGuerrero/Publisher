@@ -1,5 +1,5 @@
 import React from 'react';
-import { NewsArticle, AdvancedSettings } from '../types';
+import { NewsArticle, AdvancedSettings, SourceGroup } from '../types';
 import { getMediaSrc } from '../utils';
 
 interface StepCompleteProps {
@@ -20,6 +20,7 @@ interface StepCompleteProps {
     exportProgress: number;
     advancedSettings: AdvancedSettings;
     onReset: () => void;
+    groupedSources: SourceGroup[];
 }
 
 export const StepComplete: React.FC<StepCompleteProps> = ({
@@ -39,7 +40,8 @@ export const StepComplete: React.FC<StepCompleteProps> = ({
     exportStatus,
     exportProgress,
     advancedSettings,
-    onReset
+    onReset,
+    groupedSources
 }) => {
     return (
         <div className="animate-fade-in max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -116,11 +118,52 @@ export const StepComplete: React.FC<StepCompleteProps> = ({
 
                 {/* ARTICLE TEXT */}
                 <div className="prose prose-lg prose-invert prose-indigo max-w-none">
-                     {article.content.split('\n').map((line, i) => {
-                        if (line.startsWith('###')) return <h3 key={i} className="text-2xl font-bold text-white mt-8 mb-4">{line.replace(/#/g,'')}</h3>;
-                        return <p key={i} className="text-slate-300 mb-4 leading-relaxed">{line}</p>;
+                     {article.content.split('\n').map((rawLine, i) => {
+                        const line = typeof rawLine === 'string' ? rawLine : String(rawLine ?? '');
+                        const trimmed = line.trim();
+
+                        // Caso: subtítulos devueltos como HTML, ej. <h3>Texto</h3>
+                        const lower = trimmed.toLowerCase();
+                        if (lower.startsWith('<h') && lower.includes('>') && lower.includes('</')) {
+                            const openEnd = trimmed.indexOf('>');
+                            const closeStart = trimmed.lastIndexOf('</');
+                            const inner = openEnd >= 0 && closeStart > openEnd
+                                ? trimmed.substring(openEnd + 1, closeStart).trim()
+                                : trimmed;
+
+                            return (
+                                <h3 key={i} className="text-2xl font-bold text-white mt-8 mb-4">
+                                    {inner}
+                                </h3>
+                            );
+                        }
+
+                        // Caso: markdown estilo ### Título
+                        if (trimmed.startsWith('###')) {
+                            return (
+                                <h3 key={i} className="text-2xl font-bold text-white mt-8 mb-4">
+                                    {trimmed.replace(/#/g, '').trim()}
+                                </h3>
+                            );
+                        }
+
+                        return (
+                            <p key={i} className="text-slate-300 mb-4 leading-relaxed">
+                                {line}
+                            </p>
+                        );
                     })}
                 </div>
+                {groupedSources.length > 0 && (
+                    <div className="mt-4 text-sm text-slate-400">
+                        <span className="font-semibold">Fuentes: </span>
+                        {groupedSources.map((group, idx) => (
+                            <span key={group.domain}>
+                                {group.domain}{idx < groupedSources.length - 1 ? '; ' : '.'}
+                            </span>
+                        ))}
+                    </div>
+                )}
                 
             </div>
 

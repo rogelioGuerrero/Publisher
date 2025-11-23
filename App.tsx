@@ -18,6 +18,7 @@ import {
   SourceGroup,
   ProjectConfig
 } from './types';
+import { getMediaSrc } from './utils';
 import { setGeminiApiKey } from './services/geminiService';
 import { setPexelsApiKey } from './services/pexelsService';
 import { PLACEHOLDERS, getRegionPreferredDomains } from './constants';
@@ -151,11 +152,14 @@ export const App: React.FC = () => {
   const [history, setHistory] = useState<NewsArticle[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
+  const envGeminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  const envPexelsKey = import.meta.env.VITE_PEXELS_API_KEY || '';
+
   const [projectConfig, setProjectConfig] = useState<ProjectConfig>(() => {
     if (typeof window === 'undefined') {
       return {
-        geminiApiKey: '',
-        pexelsApiKey: '',
+        geminiApiKey: envGeminiKey,
+        pexelsApiKey: envPexelsKey,
         preferredDomains: getRegionPreferredDomains('world'),
         blockedDomains: []
       };
@@ -165,8 +169,8 @@ export const App: React.FC = () => {
       if (stored) {
         const parsed = JSON.parse(stored);
         return {
-          geminiApiKey: parsed.geminiApiKey || '',
-          pexelsApiKey: parsed.pexelsApiKey || '',
+          geminiApiKey: parsed.geminiApiKey || envGeminiKey,
+          pexelsApiKey: parsed.pexelsApiKey || envPexelsKey,
           preferredDomains: parsed.preferredDomains || getRegionPreferredDomains('world'),
           blockedDomains: parsed.blockedDomains || []
         };
@@ -175,8 +179,8 @@ export const App: React.FC = () => {
       console.warn('Failed to parse project config', e);
     }
     return {
-      geminiApiKey: '',
-      pexelsApiKey: '',
+      geminiApiKey: envGeminiKey,
+      pexelsApiKey: envPexelsKey,
       preferredDomains: getRegionPreferredDomains('world'),
       blockedDomains: []
     };
@@ -196,11 +200,22 @@ export const App: React.FC = () => {
     const groups = Object.values(
         article.sources.reduce<Record<string, SourceGroup>>((acc, src) => {
         const domain = (() => {
+            const uri = src.uri;
+
+            // Special handling for Vertex AI Search redirect URLs: use title as domain label when possible
+            if (uri.includes('vertexaisearch') && src.title) {
+                const candidate = src.title.trim();
+                // Basic heuristic: looks like a domain (contains a dot and no spaces)
+                if (candidate.includes('.') && !candidate.includes(' ')) {
+                    return candidate;
+                }
+            }
+
             try {
-                const hostname = new URL(src.uri).hostname;
+                const hostname = new URL(uri).hostname;
                 return hostname.replace(/^www\./, '');
             } catch (e) {
-                return src.uri;
+                return uri;
             }
         })();
 
@@ -432,6 +447,7 @@ export const App: React.FC = () => {
         title: textData.title,
         content: textData.content,
         sources: textData.sources,
+        rawSources: textData.rawSourceChunks,
         media: [],
         language: selectedLanguage,
         keywords: textData.keywords,
@@ -531,7 +547,8 @@ export const App: React.FC = () => {
       const reader = new FileReader();
       reader.onload = (evt) => {
           const base64 = (evt.target?.result as string).split(',')[1];
-          const isVideo = file.type.startsWith('video/');
+          const mimeType = typeof file.type === 'string' ? file.type : '';
+          const isVideo = mimeType.startsWith('video/');
           const newItem: MediaItem = {
               type: isVideo ? 'video' : 'image',
               data: base64,
@@ -711,8 +728,12 @@ export const App: React.FC = () => {
           featured: false,
           audioUrl: article.audioUrl || null,
           content: article.content,
-          sources: groupedSources,
-          media: article.media
+          sources: groupedSources.map(g => g.domain),
+          media: article.media.map(m => ({
+              type: m.type,
+              src: getMediaSrc(m),
+              caption: article.imagePrompt || article.title
+          }))
       };
       
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: "application/json"});
@@ -823,8 +844,10 @@ export const App: React.FC = () => {
             <StepTextReview 
                 article={article}
                 groupedSources={groupedSources}
+                rawSourceChunks={article.rawSources || []}
                 onBack={() => setCurrentStep(GenerationStep.INPUT)}
                 onConfirm={handleConfirmText}
+                onRetryGeneration={startGeneration}
             />
         )}
 
@@ -873,6 +896,7 @@ export const App: React.FC = () => {
                 exportProgress={exportProgress}
                 advancedSettings={advancedSettings}
                 onReset={handleReset}
+                groupedSources={groupedSources}
             />
         )}
 

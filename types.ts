@@ -17,6 +17,13 @@ export interface NewsSource {
     uri: string;
 }
 
+export interface RawSourceChunk {
+    title?: string | null;
+    uri?: string | null;
+    snippet?: string | null;
+    provider?: string | null;
+}
+
 export interface MediaItem {
     type: 'image' | 'video';
     data: string; // Base64 or URL
@@ -37,6 +44,7 @@ export interface NewsArticle {
     title: string;
     content: string;
     sources: NewsSource[];
+    rawSources?: RawSourceChunk[];
     media: MediaItem[]; 
     audioUrl?: string;
     language: Language;
