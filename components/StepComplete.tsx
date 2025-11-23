@@ -211,8 +211,8 @@ export const StepComplete: React.FC<StepCompleteProps> = ({
                             </button>
                         </div>
 
-                        <button onClick={onExportVideo} disabled={isExportingVideo} className="w-full btn btn-primary py-3 px-8 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isExportingVideo ? 'Renderizando...' : 'Exportar Video MP4'}
+                        <button onClick={onExportVideo} disabled={isExportingVideo || !article.audioUrl} className="w-full btn btn-primary py-3 px-8 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isExportingVideo ? 'Preparando audio...' : 'Descargar audio'}
                         </button>
 
                         {isExportingVideo && (

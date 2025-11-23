@@ -746,29 +746,43 @@ export const App: React.FC = () => {
   };
 
   const simulateExport = (type: string) => {
-    if (!article) return;
+    const currentArticle = article;
+    if (!currentArticle || !currentArticle.audioUrl) {
+        alert("Primero genera el audio del artículo antes de exportarlo.");
+        return;
+    }
+
+    const audioUrl = currentArticle.audioUrl;
+    const articleId = currentArticle.id;
+
     setIsExportingVideo(true);
-    setExportStatus("Iniciando renderizado...");
+    setExportStatus("Preparando archivo de audio...");
     setExportProgress(0);
 
     let progress = 0;
     const interval = setInterval(() => {
-        progress += Math.random() * 15;
+        progress += 25;
         if (progress > 100) progress = 100;
-        setExportProgress(Math.floor(progress));
-
-        if (progress < 30) setExportStatus("Procesando fotogramas...");
-        else if (progress < 60) setExportStatus("Mezclando audio...");
-        else setExportStatus("Finalizando...");
+        setExportProgress(progress);
 
         if (progress >= 100) {
             clearInterval(interval);
-            setTimeout(() => {
-                setIsExportingVideo(false);
-                alert("Exportación completada (Simulación).");
-            }, 500);
+            try {
+                const a = document.createElement('a');
+                a.href = audioUrl;
+                a.download = `newsgen-${articleId}.wav`;
+                a.click();
+                setExportStatus("Descarga de audio iniciada");
+            } catch (e) {
+                console.error("Error exporting audio", e);
+                setExportStatus("Error exportando audio");
+            } finally {
+                setTimeout(() => {
+                    setIsExportingVideo(false);
+                }, 400);
+            }
         }
-    }, 400);
+    }, 200);
   };
 
   const getShareUrl = () => {
