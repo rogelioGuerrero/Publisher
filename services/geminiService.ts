@@ -2,11 +2,11 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem, RawSourceChunk } from "../types";
 
 let geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
-let ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+let ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey, apiVersion: "v1" }) : null;
 
 export const setGeminiApiKey = (key: string) => {
   geminiApiKey = key;
-  ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+  ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey, apiVersion: "v1" }) : null;
 };
 
 const requireAiClient = () => {
@@ -183,7 +183,7 @@ export const generateNewsContent = async (
     }
 
     const response = await client.models.generateContent({
-      model: "gemini-1.5-flash", // Use 1.5 flash model for faster, lighter requests
+      model: "gemini-2.5-flash-lite", // Use recommended flash-lite model for efficiency
       contents
     });
 
