@@ -115,8 +115,12 @@ export interface SourceGroup {
     links: { title: string; uri: string }[];
 }
 
+export type AIProvider = 'gemini' | 'deepseek';
+
 export interface ProjectConfig {
+    activeProvider: AIProvider;
     geminiApiKey: string;
+    deepseekApiKey: string;
     pexelsApiKey: string;
     preferredDomains: string[];
     blockedDomains: string[];

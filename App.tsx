@@ -5,6 +5,11 @@ import {
   generateNewsAudio, 
   generateSocialPost 
 } from './services/geminiService';
+import { 
+  generateArticleWithDeepseek, 
+  generateSocialPostWithDeepseek, 
+  setDeepseekApiKey 
+} from './services/deepseekService';
 import { searchPexels } from './services/pexelsService';
 import { 
   GenerationStep, 
@@ -153,12 +158,15 @@ export const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
 
   const envGeminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  const envDeepseekKey = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
   const envPexelsKey = import.meta.env.VITE_PEXELS_API_KEY || '';
 
   const [projectConfig, setProjectConfig] = useState<ProjectConfig>(() => {
     if (typeof window === 'undefined') {
       return {
+        activeProvider: 'gemini',
         geminiApiKey: envGeminiKey,
+        deepseekApiKey: envDeepseekKey,
         pexelsApiKey: envPexelsKey,
         preferredDomains: getRegionPreferredDomains('world'),
         blockedDomains: []
@@ -169,7 +177,9 @@ export const App: React.FC = () => {
       if (stored) {
         const parsed = JSON.parse(stored);
         return {
+          activeProvider: parsed.activeProvider || 'gemini',
           geminiApiKey: parsed.geminiApiKey || envGeminiKey,
+          deepseekApiKey: parsed.deepseekApiKey || envDeepseekKey,
           pexelsApiKey: parsed.pexelsApiKey || envPexelsKey,
           preferredDomains: parsed.preferredDomains || getRegionPreferredDomains('world'),
           blockedDomains: parsed.blockedDomains || []
@@ -179,7 +189,9 @@ export const App: React.FC = () => {
       console.warn('Failed to parse project config', e);
     }
     return {
+      activeProvider: 'gemini',
       geminiApiKey: envGeminiKey,
+      deepseekApiKey: envDeepseekKey,
       pexelsApiKey: envPexelsKey,
       preferredDomains: getRegionPreferredDomains('world'),
       blockedDomains: []
@@ -271,6 +283,9 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (projectConfig.geminiApiKey) {
       setGeminiApiKey(projectConfig.geminiApiKey);
+    }
+    if (projectConfig.deepseekApiKey) {
+      setDeepseekApiKey(projectConfig.deepseekApiKey);
     }
     if (projectConfig.pexelsApiKey) {
       setPexelsApiKey(projectConfig.pexelsApiKey);
@@ -433,37 +448,70 @@ export const App: React.FC = () => {
 
     setError(null);
     setCurrentStep(GenerationStep.TEXT_SEARCH);
-    setStatusMessage("Investigando fuentes y redactando...");
-
+    
     try {
-      const textData = await generateNewsContent(
-          inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings
-      );
+      let title = "";
+      let content = "";
+      let sources: any[] = [];
+      let rawSources: any[] = [];
+      let imagePrompt = "";
+      let keywords: string[] = [];
+      let metaDescription = "";
+
+      if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
+        setStatusMessage("Redactando artículo con DeepSeek...");
+        const result = await generateArticleWithDeepseek(
+          inputValue, 
+          selectedLanguage, 
+          selectedLength, 
+          advancedSettings,
+          inputMode
+        );
+
+        title = result.title;
+        content = result.content;
+        imagePrompt = result.imagePrompt;
+        keywords = result.keywords;
+        metaDescription = result.metaDescription;
+      } else {
+        // Default to Gemini
+        setStatusMessage("Redactando artículo con Gemini...");
+        const textData = await generateNewsContent(
+            inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings
+        );
+        title = textData.title;
+        content = textData.content;
+        sources = textData.sources;
+        rawSources = textData.rawSourceChunks;
+        imagePrompt = textData.imagePrompt;
+        keywords = textData.keywords;
+        metaDescription = textData.metaDescription;
+      }
       
       const partialArticle: NewsArticle = {
         id: Date.now().toString(),
         createdAt: Date.now(),
         topic: inputMode === 'topic' ? inputValue : selectedFile?.name || 'Documento',
-        title: textData.title,
-        content: textData.content,
-        sources: textData.sources,
-        rawSources: textData.rawSourceChunks,
+        title,
+        content,
+        sources,
+        rawSources,
         media: [],
         language: selectedLanguage,
-        keywords: textData.keywords,
-        metaDescription: textData.metaDescription,
-        imagePrompt: textData.imagePrompt
+        keywords,
+        metaDescription,
+        imagePrompt
       };
       setArticle(partialArticle);
       
-      const suggestion = textData.keywords[0] || (inputMode === 'topic' ? inputValue : '');
+      const suggestion = keywords[0] || (inputMode === 'topic' ? inputValue : '');
       setPexelsQueryInput(suggestion);
 
       setCurrentStep(GenerationStep.TEXT_REVIEW);
       setStatusMessage('');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Ocurrió un error inesperado. Verifica tu API Key.");
+      setError(err.message || "Ocurrió un error inesperado. Verifica tus API Keys.");
       setCurrentStep(GenerationStep.INPUT);
       setStatusMessage('');
     }
@@ -675,7 +723,12 @@ export const App: React.FC = () => {
       if (!article) return;
       setIsGeneratingSocial(true);
       try {
-        const content = await generateSocialPost(article, platform);
+        let content = "";
+        if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
+          content = await generateSocialPostWithDeepseek(article, platform);
+        } else {
+          content = await generateSocialPost(article, platform);
+        }
         setSocialContentMap(prev => ({ ...prev, [platform]: content }));
       } catch (e) {
         setSocialContentMap(prev => ({ ...prev, [platform]: "Error generando contenido." }));

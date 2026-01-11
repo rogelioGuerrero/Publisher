@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ProjectConfig } from '../types';
+import { ProjectConfig, AIProvider } from '../types';
 
 interface ProjectSettingsModalProps {
     isOpen: boolean;
@@ -16,14 +16,18 @@ const parseList = (value: string) => value
 const formatList = (items: string[]) => items.join('\n');
 
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOpen, initialConfig, onClose, onSave }) => {
+    const [activeProvider, setActiveProvider] = useState<AIProvider>('gemini');
     const [geminiKey, setGeminiKey] = useState('');
+    const [deepseekKey, setDeepseekKey] = useState('');
     const [pexelsKey, setPexelsKey] = useState('');
     const [preferredDomains, setPreferredDomains] = useState('');
     const [blockedDomains, setBlockedDomains] = useState('');
 
     useEffect(() => {
         if (!isOpen) return;
+        setActiveProvider(initialConfig.activeProvider || 'gemini');
         setGeminiKey(initialConfig.geminiApiKey || '');
+        setDeepseekKey(initialConfig.deepseekApiKey || '');
         setPexelsKey(initialConfig.pexelsApiKey || '');
         setPreferredDomains(formatList(initialConfig.preferredDomains || []));
         setBlockedDomains(formatList(initialConfig.blockedDomains || []));
@@ -33,7 +37,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
 
     const handleSave = () => {
         onSave({
+            activeProvider,
             geminiApiKey: geminiKey.trim(),
+            deepseekApiKey: deepseekKey.trim(),
             pexelsApiKey: pexelsKey.trim(),
             preferredDomains: parseList(preferredDomains),
             blockedDomains: parseList(blockedDomains)
@@ -53,12 +59,35 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
 
                 <div className="grid grid-cols-1 gap-4">
                     <label className="space-y-2">
+                        <span className="text-xs uppercase font-bold text-slate-500">Proveedor de IA Activo</span>
+                        <select 
+                            value={activeProvider}
+                            onChange={(e) => setActiveProvider(e.target.value as AIProvider)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                        >
+                            <option value="gemini">Google Gemini</option>
+                            <option value="deepseek">DeepSeek</option>
+                        </select>
+                    </label>
+
+                    <label className="space-y-2">
                         <span className="text-xs uppercase font-bold text-slate-500">Gemini API Key</span>
                         <input 
                             type="text"
                             value={geminiKey}
                             onChange={(e) => setGeminiKey(e.target.value)}
                             placeholder="Ej: AIza..."
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                        />
+                    </label>
+
+                    <label className="space-y-2">
+                        <span className="text-xs uppercase font-bold text-slate-500">DeepSeek API Key</span>
+                        <input 
+                            type="text"
+                            value={deepseekKey}
+                            onChange={(e) => setDeepseekKey(e.target.value)}
+                            placeholder="Ej: sk-..."
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
                         />
                     </label>

@@ -140,7 +140,6 @@ export const generateNewsContent = async (
   try {
     const client = requireAiClient();
     let contents: any[] = [];
-    let tools: any[] = [];
 
     const langNames = { es: "Spanish", en: "English", fr: "French", pt: "Portuguese", de: "German" };
     const targetLang = langNames[language];
@@ -156,16 +155,7 @@ export const generateNewsContent = async (
     - Target Audience: ${settings.audience.toUpperCase()}
     - Editorial Focus (Angle): ${settings.focus.toUpperCase()}
     
-    SOURCE QUALITY BASELINE (ALWAYS ENFORCED):
-    - When using external information or news coverage, always rely on reputable, well-known news outlets and official institutions.
-    - Avoid blogs, forums, tabloids, and low-credibility websites as primary sources.
-    
-    CONTENT REQUIREMENTS (STRICT):
-    ${settings.includeQuotes ? "- MUST include direct quotes (with attribution) from relevant figures or documents." : ""}
-    ${settings.includeStats ? "- MUST include specific data, statistics, percentages, or financial figures." : ""}
-    ${settings.includeCounterArguments ? "- MUST include a counter-argument, alternative perspective, or risks involved to ensure balance." : ""}
-    
-    Task: Write a news article following these constraints.
+    Task: Write a news article following these constraints. Use your internal knowledge to provide accurate and verifiable information.
     
     Structure the response with these EXACT separators:
     |||HEADLINE|||
@@ -183,43 +173,18 @@ export const generateNewsContent = async (
         { text: `${systemPrompt}\n\nSource Material Provided. Instruction: ${input || "Create a story based on this document."}` }
       ];
     } else {
-      let searchContext = `Topic: "${input}".`;
+      let userPrompt = `Topic: "${input}".`;
 
       if (settings.timeFrame !== "any") {
-        searchContext += ` Focus on events from the last ${settings.timeFrame}.`;
+        userPrompt += ` Focus on events from the last ${settings.timeFrame} if possible.`;
       }
 
-      const regionInstructions: Record<string, string> = {
-        world: "Use global sources.",
-        us: "Prioritize US-based Tier 1 sources (e.g., NYT, WSJ, Washington Post). Ignore derivative content.",
-        eu: "Prioritize European sources (e.g., BBC, DW, Le Monde, El Pais).",
-        latam: "Prioritize Latin American sources.",
-        asia: "Prioritize Asian sources."
-      };
-      searchContext += ` ${regionInstructions[settings.sourceRegion]}`;
-
-      if (settings.preferredDomains.length > 0) {
-        searchContext += ` Give preference to these vetted domains when available: ${settings.preferredDomains.join(", ")}. You may still cite other reputable, well-sourced outlets if they strengthen the story.`;
-      }
-
-      if (settings.blockedDomains.length > 0) {
-        searchContext += ` Do NOT use information from these domains: ${settings.blockedDomains.join(", ")}.`;
-      }
-
-      if (settings.verifiedSourcesOnly) {
-        searchContext += " STRICTLY use only verified, authoritative, and reputable news sources. Do not use blogs, forums, or tabloid sites.";
-      }
-
-      contents = [{ text: `${systemPrompt}\n\n${searchContext}` }];
-      tools = [{ googleSearch: {} }];
+      contents = [{ text: `${systemPrompt}\n\n${userPrompt}` }];
     }
 
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents,
-      config: {
-        tools: tools.length > 0 ? tools : undefined
-      }
+      model: "gemini-2.0-flash", // Use standard flash model without search tool
+      contents
     });
 
     const fullText = response.text || "";
