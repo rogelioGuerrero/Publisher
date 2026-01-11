@@ -155,13 +155,13 @@ export const generateNewsContent = async (
     - Target Audience: ${settings.audience.toUpperCase()}
     - Editorial Focus (Angle): ${settings.focus.toUpperCase()}
     
-    Task: Write a news article following these constraints. Use your internal knowledge to provide accurate and verifiable information.
+    Task: Write a news article following these constraints. Use your internal knowledge to provide accurate and verifiable information. Cite at least two reliable sources with URLs (prioritize reputable outlets) and mention the domain with each quote.
     
     Structure the response with these EXACT separators:
     |||HEADLINE|||
     (Write the catchy headline here)
     |||BODY|||
-    (Write the article body in Markdown here. Use H3 for subheaders.)
+    (Write the article body in Markdown here. Use H3 for subheaders and include inline citations.)
     |||IMAGE_PROMPT|||
     (Write a highly detailed English prompt for an image generator.)
     |||METADATA|||
@@ -183,7 +183,7 @@ export const generateNewsContent = async (
     }
 
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash-lite", // Use recommended flash-lite model for efficiency
+      model: "gemini-2.5-flash", // Use balanced flash model that tends to include citations
       contents
     });
 
