@@ -183,7 +183,7 @@ export const generateNewsContent = async (
     }
 
     const response = await client.models.generateContent({
-      model: "gemini-2.0-flash", // Use standard flash model without search tool
+      model: "gemini-1.5-flash", // Use 1.5 flash model for faster, lighter requests
       contents
     });
 
