@@ -162,16 +162,20 @@ export const App: React.FC = () => {
   const envPexelsKey = import.meta.env.VITE_PEXELS_API_KEY || '';
 
   const [projectConfig, setProjectConfig] = useState<ProjectConfig>(() => {
+    const defaultConfig: ProjectConfig = {
+      activeProvider: 'gemini',
+      geminiApiKey: envGeminiKey,
+      deepseekApiKey: envDeepseekKey,
+      pexelsApiKey: envPexelsKey,
+      preferredDomains: getRegionPreferredDomains('world'),
+      blockedDomains: [],
+      imageModel: 'gemini-2.5-flash-image'
+    };
+
     if (typeof window === 'undefined') {
-      return {
-        activeProvider: 'gemini',
-        geminiApiKey: envGeminiKey,
-        deepseekApiKey: envDeepseekKey,
-        pexelsApiKey: envPexelsKey,
-        preferredDomains: getRegionPreferredDomains('world'),
-        blockedDomains: []
-      };
+      return defaultConfig;
     }
+
     try {
       const stored = localStorage.getItem('newsgen_project_config');
       if (stored) {
@@ -182,20 +186,15 @@ export const App: React.FC = () => {
           deepseekApiKey: parsed.deepseekApiKey || envDeepseekKey,
           pexelsApiKey: parsed.pexelsApiKey || envPexelsKey,
           preferredDomains: parsed.preferredDomains || getRegionPreferredDomains('world'),
-          blockedDomains: parsed.blockedDomains || []
+          blockedDomains: parsed.blockedDomains || [],
+          imageModel: parsed.imageModel || 'gemini-2.5-flash-image'
         };
       }
     } catch (e) {
       console.warn('Failed to parse project config', e);
     }
-    return {
-      activeProvider: 'gemini',
-      geminiApiKey: envGeminiKey,
-      deepseekApiKey: envDeepseekKey,
-      pexelsApiKey: envPexelsKey,
-      preferredDomains: getRegionPreferredDomains('world'),
-      blockedDomains: []
-    };
+
+    return defaultConfig;
   });
   const [showProjectSettings, setShowProjectSettings] = useState(false);
 
@@ -530,7 +529,7 @@ export const App: React.FC = () => {
         const pexelsQuery = article.keywords[0] || article.topic;
         
         const [imageBytes, pexelsItems] = await Promise.all([
-            generateNewsImages(article.imagePrompt),
+            generateNewsImages(article.imagePrompt, projectConfig.imageModel),
             searchPexels(pexelsQuery, 'mixed', 2) 
         ]);
 
@@ -555,7 +554,7 @@ export const App: React.FC = () => {
       setIsGeneratingImages(true);
       try {
           const prompt = `Editorial illustration for news about: ${article.title}. Style: ${advancedSettings.visualStyle}`;
-          const newImages = await generateNewsImages(prompt);
+          const newImages = await generateNewsImages(prompt, projectConfig.imageModel);
           const newMediaItems: MediaItem[] = newImages.map(b => ({
               type: 'image',
               data: b,

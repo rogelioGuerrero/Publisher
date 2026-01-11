@@ -117,6 +117,8 @@ export interface SourceGroup {
 
 export type AIProvider = 'gemini' | 'deepseek';
 
+export type ImageModel = 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview' | 'imagen-3-fast-generate-001';
+
 export interface ProjectConfig {
     activeProvider: AIProvider;
     geminiApiKey: string;
@@ -124,6 +126,7 @@ export interface ProjectConfig {
     pexelsApiKey: string;
     preferredDomains: string[];
     blockedDomains: string[];
+    imageModel: ImageModel;
 }
 
 declare global {

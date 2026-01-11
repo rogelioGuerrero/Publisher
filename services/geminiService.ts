@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem, RawSourceChunk } from "../types";
+import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem, RawSourceChunk, ImageModel } from "../types";
 
 let geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 let ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey, apiVersion: "v1" }) : null;
@@ -277,11 +277,11 @@ export const generateNewsContent = async (
   }
 };
 
-export const generateNewsImages = async (prompt: string): Promise<string[]> => {
+export const generateNewsImages = async (prompt: string, model: ImageModel = "gemini-2.5-flash-image"): Promise<string[]> => {
   try {
     const client = requireAiClient();
     const response = await client.models.generateImages({
-      model: "imagen-4.0-generate-001",
+      model,
       prompt,
       config: {
         numberOfImages: 3,

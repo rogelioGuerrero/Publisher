@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ProjectConfig, AIProvider } from '../types';
+import { ProjectConfig, AIProvider, ImageModel } from '../types';
 
 interface ProjectSettingsModalProps {
     isOpen: boolean;
@@ -22,6 +22,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
     const [pexelsKey, setPexelsKey] = useState('');
     const [preferredDomains, setPreferredDomains] = useState('');
     const [blockedDomains, setBlockedDomains] = useState('');
+    const [imageModel, setImageModel] = useState<ImageModel>('gemini-2.5-flash-image');
 
     useEffect(() => {
         if (!isOpen) return;
@@ -31,6 +32,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
         setPexelsKey(initialConfig.pexelsApiKey || '');
         setPreferredDomains(formatList(initialConfig.preferredDomains || []));
         setBlockedDomains(formatList(initialConfig.blockedDomains || []));
+        setImageModel(initialConfig.imageModel || 'gemini-2.5-flash-image');
     }, [isOpen, initialConfig]);
 
     if (!isOpen) return null;
@@ -42,7 +44,8 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
             deepseekApiKey: deepseekKey.trim(),
             pexelsApiKey: pexelsKey.trim(),
             preferredDomains: parseList(preferredDomains),
-            blockedDomains: parseList(blockedDomains)
+            blockedDomains: parseList(blockedDomains),
+            imageModel
         });
     };
 
@@ -117,6 +120,19 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
                             <p className="text-[11px] text-slate-500">La IA priorizará estos dominios al investigar.</p>
                         </label>
 
+                        <label className="space-y-2">
+                            <span className="text-xs uppercase font-bold text-slate-500">Modelo de Imagen</span>
+                            <select
+                                value={imageModel}
+                                onChange={(e) => setImageModel(e.target.value as ImageModel)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                            >
+                                <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image</option>
+                                <option value="gemini-3-pro-image-preview">Gemini 3 Pro Preview</option>
+                                <option value="imagen-3-fast-generate-001">Imagen 3 Fast Generate</option>
+                            </select>
+                        </label>
+    
                         <label className="space-y-2">
                             <span className="text-xs uppercase font-bold text-slate-500">Dominios Bloqueados</span>
                             <textarea
