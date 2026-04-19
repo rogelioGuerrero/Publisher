@@ -115,50 +115,20 @@ export interface SourceGroup {
     links: { title: string; uri: string }[];
 }
 
+export type AIProvider = 'gemini' | 'deepseek';
+
+export type ImageModel = 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview' | 'imagen-3-fast-generate-001';
+
 export interface ProjectConfig {
+    activeProvider: AIProvider;
     geminiApiKey: string;
+    deepseekApiKey: string;
     pexelsApiKey: string;
     gnewsApiKey: string;
     apinewsApiKey: string;
     preferredDomains: string[];
     blockedDomains: string[];
-    preferredNewsProvider: NewsApiProvider;
-}
-
-// --- NEWS API TYPES ---
-
-export type NewsApiProvider = 'gnews' | 'apinews';
-
-export interface NewsSearchParams {
-    query?: string;
-    language?: string;
-    region?: SourceRegion;
-    timeFrame?: TimeFrame;
-    maxResults?: number;
-    category?: string;
-}
-
-export interface NewsSourceInfo {
-    name: string;
-    url: string;
-}
-
-export interface NewsArticleData {
-    title: string;
-    description: string;
-    content: string;
-    url: string;
-    imageUrl: string | null;
-    publishedAt: string;
-    source: NewsSourceInfo;
-    provider: NewsApiProvider;
-}
-
-// Resultado de búsqueda de noticias con metadatos
-export interface NewsSearchResult {
-    articles: NewsArticleData[];
-    provider: NewsApiProvider;
-    usedFallback: boolean;
+    imageModel: ImageModel;
 }
 
 declare global {

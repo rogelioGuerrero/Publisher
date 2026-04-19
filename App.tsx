@@ -5,6 +5,11 @@ import {
   generateNewsAudio, 
   generateSocialPost 
 } from './services/geminiService';
+import { 
+  generateArticleWithDeepseek, 
+  generateSocialPostWithDeepseek, 
+  setDeepseekApiKey 
+} from './services/deepseekService';
 import { searchPexels } from './services/pexelsService';
 import { setGNewsApiKey, setApiNewsApiKey, searchNews } from './services/newsApiService';
 import { 
@@ -154,48 +159,47 @@ export const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
 
   const envGeminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
+  const envDeepseekKey = import.meta.env.VITE_DEEPSEEK_API_KEY || '';
   const envPexelsKey = import.meta.env.VITE_PEXELS_API_KEY || '';
   const envGNewsKey = import.meta.env.VITE_GNEWS_API_KEY || '';
   const envApiNewsKey = import.meta.env.VITE_APINEWS_API_KEY || '';
 
   const [projectConfig, setProjectConfig] = useState<ProjectConfig>(() => {
+    const defaultConfig: ProjectConfig = {
+      activeProvider: 'gemini',
+      geminiApiKey: envGeminiKey,
+      deepseekApiKey: envDeepseekKey,
+      pexelsApiKey: envPexelsKey,
+      preferredDomains: getRegionPreferredDomains('world'),
+      blockedDomains: [],
+      imageModel: 'gemini-2.5-flash-image'
+    };
+
     if (typeof window === 'undefined') {
-      return {
-        geminiApiKey: envGeminiKey,
-        pexelsApiKey: envPexelsKey,
-        gnewsApiKey: envGNewsKey,
-        apinewsApiKey: envApiNewsKey,
-        preferredDomains: getRegionPreferredDomains('world'),
-        blockedDomains: [],
-        preferredNewsProvider: 'gnews'
-      };
+      return defaultConfig;
     }
+
     try {
       const stored = localStorage.getItem('newsgen_project_config');
       if (stored) {
         const parsed = JSON.parse(stored);
         return {
+          activeProvider: parsed.activeProvider || 'gemini',
           geminiApiKey: parsed.geminiApiKey || envGeminiKey,
+          deepseekApiKey: parsed.deepseekApiKey || envDeepseekKey,
           pexelsApiKey: parsed.pexelsApiKey || envPexelsKey,
           gnewsApiKey: parsed.gnewsApiKey || envGNewsKey,
           apinewsApiKey: parsed.apinewsApiKey || envApiNewsKey,
           preferredDomains: parsed.preferredDomains || getRegionPreferredDomains('world'),
           blockedDomains: parsed.blockedDomains || [],
-          preferredNewsProvider: parsed.preferredNewsProvider || 'gnews'
+          imageModel: parsed.imageModel || 'gemini-2.5-flash-image'
         };
       }
     } catch (e) {
       console.warn('Failed to parse project config', e);
     }
-    return {
-      geminiApiKey: envGeminiKey,
-      pexelsApiKey: envPexelsKey,
-      gnewsApiKey: envGNewsKey,
-      apinewsApiKey: envApiNewsKey,
-      preferredDomains: getRegionPreferredDomains('world'),
-      blockedDomains: [],
-      preferredNewsProvider: 'gnews'
-    };
+
+    return defaultConfig;
   });
   const [showProjectSettings, setShowProjectSettings] = useState(false);
 
@@ -283,6 +287,9 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (projectConfig.geminiApiKey) {
       setGeminiApiKey(projectConfig.geminiApiKey);
+    }
+    if (projectConfig.deepseekApiKey) {
+      setDeepseekApiKey(projectConfig.deepseekApiKey);
     }
     if (projectConfig.pexelsApiKey) {
       setPexelsApiKey(projectConfig.pexelsApiKey);
@@ -451,70 +458,70 @@ export const App: React.FC = () => {
 
     setError(null);
     setCurrentStep(GenerationStep.TEXT_SEARCH);
-
+    
     try {
-      let externalNews = undefined;
+      let title = "";
+      let content = "";
+      let sources: any[] = [];
+      let rawSources: any[] = [];
+      let imagePrompt = "";
+      let keywords: string[] = [];
+      let metaDescription = "";
 
-      // Si es modo topic, buscar noticias en APIs externas primero
-      if (inputMode === 'topic') {
-        const hasNewsApi = projectConfig.gnewsApiKey || projectConfig.apinewsApiKey;
-        
-        if (hasNewsApi) {
-          setStatusMessage("Consultando fuentes de noticias...");
-          
-          try {
-            const newsResult = await searchNews({
-              query: inputValue,
-              language: selectedLanguage,
-              region: advancedSettings.sourceRegion,
-              timeFrame: advancedSettings.timeFrame,
-              maxResults: 10
-            }, projectConfig.preferredNewsProvider);
-            
-            externalNews = newsResult.articles;
-            
-            if (newsResult.usedFallback) {
-              console.log(`Usando fallback: ${newsResult.provider}`);
-            }
-            
-            console.log(`Encontradas ${externalNews.length} noticias de ${newsResult.provider}`);
-          } catch (newsErr) {
-            console.warn("Error buscando noticias externas:", newsErr);
-            // Continuar sin noticias externas - usará fallback de Google Search
-          }
-        }
+      if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
+        setStatusMessage("Redactando artículo con DeepSeek...");
+        const result = await generateArticleWithDeepseek(
+          inputValue, 
+          selectedLanguage, 
+          selectedLength, 
+          advancedSettings,
+          inputMode
+        );
+
+        title = result.title;
+        content = result.content;
+        imagePrompt = result.imagePrompt;
+        keywords = result.keywords;
+        metaDescription = result.metaDescription;
+      } else {
+        // Default to Gemini
+        setStatusMessage("Redactando artículo con Gemini...");
+        const textData = await generateNewsContent(
+            inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings
+        );
+        title = textData.title;
+        content = textData.content;
+        sources = textData.sources;
+        rawSources = textData.rawSourceChunks;
+        imagePrompt = textData.imagePrompt;
+        keywords = textData.keywords;
+        metaDescription = textData.metaDescription;
       }
-
-      setStatusMessage("Redactando artículo con Gemini...");
-
-      const textData = await generateNewsContent(
-          inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings, externalNews
-      );
       
       const partialArticle: NewsArticle = {
         id: Date.now().toString(),
         createdAt: Date.now(),
         topic: inputMode === 'topic' ? inputValue : selectedFile?.name || 'Documento',
-        title: textData.title,
-        content: textData.content,
-        sources: textData.sources,
-        rawSources: textData.rawSourceChunks,
+        title,
+        content,
+        sources,
+        rawSources,
         media: [],
         language: selectedLanguage,
-        keywords: textData.keywords,
-        metaDescription: textData.metaDescription,
-        imagePrompt: textData.imagePrompt
+        keywords,
+        metaDescription,
+        imagePrompt
       };
       setArticle(partialArticle);
       
-      const suggestion = textData.keywords[0] || (inputMode === 'topic' ? inputValue : '');
+      const suggestion = keywords[0] || (inputMode === 'topic' ? inputValue : '');
       setPexelsQueryInput(suggestion);
 
       setCurrentStep(GenerationStep.TEXT_REVIEW);
       setStatusMessage('');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Ocurrió un error inesperado. Verifica tus API Keys.");
+      setError(err.message || "Ocurrió un error inesperado. Verifica tus API Keys.");
       setCurrentStep(GenerationStep.INPUT);
       setStatusMessage('');
     }
@@ -533,7 +540,7 @@ export const App: React.FC = () => {
         const pexelsQuery = article.keywords[0] || article.topic;
         
         const [imageBytes, pexelsItems] = await Promise.all([
-            generateNewsImages(article.imagePrompt),
+            generateNewsImages(article.imagePrompt, projectConfig.imageModel),
             searchPexels(pexelsQuery, 'mixed', 2) 
         ]);
 
@@ -558,7 +565,7 @@ export const App: React.FC = () => {
       setIsGeneratingImages(true);
       try {
           const prompt = `Editorial illustration for news about: ${article.title}. Style: ${advancedSettings.visualStyle}`;
-          const newImages = await generateNewsImages(prompt);
+          const newImages = await generateNewsImages(prompt, projectConfig.imageModel);
           const newMediaItems: MediaItem[] = newImages.map(b => ({
               type: 'image',
               data: b,
@@ -726,7 +733,12 @@ export const App: React.FC = () => {
       if (!article) return;
       setIsGeneratingSocial(true);
       try {
-        const content = await generateSocialPost(article, platform);
+        let content = "";
+        if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
+          content = await generateSocialPostWithDeepseek(article, platform);
+        } else {
+          content = await generateSocialPost(article, platform);
+        }
         setSocialContentMap(prev => ({ ...prev, [platform]: content }));
       } catch (e) {
         setSocialContentMap(prev => ({ ...prev, [platform]: "Error generando contenido." }));
