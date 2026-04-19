@@ -52,7 +52,9 @@ export default async (request, context) => {
       params.append('max', max);
       if (expand) params.append('expand', expand);
       if (query) params.append('q', query);
-      if (from) params.append('from', from);
+      // Nota: El parámetro 'from' puede causar problemas si la fecha es inválida
+      // Lo omitimos por ahora para asegurar que funcione la búsqueda básica
+      // if (from) params.append('from', from);
       
       // Región/país
       const country = url.searchParams.get('country');
@@ -83,7 +85,8 @@ export default async (request, context) => {
       params.append('language', language);
       params.append('pageSize', pageSize);
       params.append('sortBy', sortBy);
-      if (from) params.append('from', from);
+      // Omitir 'from' por ahora para evitar errores de fecha
+      // if (from) params.append('from', from);
       
       targetUrl = `https://newsapi.org/v2/everything?${params.toString()}`;
       console.log(`[PROXY] APINews URL: ${targetUrl.replace(apiKey, '***')}`);
