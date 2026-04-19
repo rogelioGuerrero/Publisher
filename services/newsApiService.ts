@@ -1,8 +1,14 @@
+import { NewsArticleData, NewsApiProvider, NewsSearchParams, SourceRegion, Language } from "../types";
 
-import { NewsArticleData, NewsApiProvider, NewsSearchParams, SourceRegion } from "../types";
+// Workaround para import.meta.env en Vite
+declare global {
+  interface ImportMeta {
+    env: Record<string, string>;
+  }
+}
 
-let gnewsApiKey = import.meta.env.VITE_GNEWS_API_KEY || "";
-let apinewsApiKey = import.meta.env.VITE_APINEWS_API_KEY || "";
+let gnewsApiKey = (import.meta.env.VITE_GNEWS_API_KEY as string) || "";
+let apinewsApiKey = (import.meta.env.VITE_APINEWS_API_KEY as string) || "";
 
 export const setGNewsApiKey = (key: string) => {
   gnewsApiKey = key;
@@ -159,7 +165,7 @@ export const searchGNews = async (params: NewsSearchParams): Promise<NewsArticle
  * Obtiene top headlines de GNews
  */
 export const getGNewsHeadlines = async (
-  language: string = 'es',
+  language: Language = 'es',
   region: SourceRegion = 'world',
   category?: string,
   maxResults: number = 10

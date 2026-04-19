@@ -138,7 +138,7 @@ export interface NewsArticleData {
 }
 
 export interface NewsSearchParams {
-    query: string;
+    query?: string;
     language?: Language;
     region?: SourceRegion;
     timeFrame?: TimeFrame;
