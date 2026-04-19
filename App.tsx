@@ -472,10 +472,15 @@ export const App: React.FC = () => {
       let metaDescription = "";
 
       // Buscar noticias externas PRIMERO (antes de elegir LLM)
-      let externalNews = undefined;
+      let externalNews: any[] | undefined = undefined;
+      
+      console.log('[DEBUG] Modo:', inputMode);
+      console.log('[DEBUG] GNews Key existe:', !!projectConfig.gnewsApiKey);
+      console.log('[DEBUG] APINews Key existe:', !!projectConfig.apinewsApiKey);
       
       if (inputMode === 'topic' && (projectConfig.gnewsApiKey || projectConfig.apinewsApiKey)) {
         setStatusMessage("Consultando fuentes de noticias...");
+        console.log('[DEBUG] Iniciando búsqueda de noticias...');
         
         try {
           const newsResult = await searchNews({
@@ -487,12 +492,16 @@ export const App: React.FC = () => {
           }, projectConfig.preferredNewsProvider || 'gnews');
           
           externalNews = newsResult.articles;
-          console.log(`Encontradas ${externalNews.length} noticias de ${newsResult.provider}`);
+          console.log(`[DEBUG] ✓ Encontradas ${externalNews?.length || 0} noticias de ${newsResult.provider}`);
+          console.log('[DEBUG] Primeras 3 noticias:', externalNews?.slice(0, 3).map((a: any) => a.title));
         } catch (newsErr) {
-          console.warn("Error buscando noticias externas:", newsErr);
-          // Continuar sin noticias externas
+          console.error('[DEBUG] ✗ Error buscando noticias:', newsErr);
         }
+      } else {
+        console.log('[DEBUG] Saltando búsqueda de noticias - modo documento o sin API keys');
       }
+      
+      console.log('[DEBUG] externalNews al final:', externalNews?.length || 0, 'artículos');
 
       if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
         setStatusMessage("Redactando artículo con DeepSeek...");

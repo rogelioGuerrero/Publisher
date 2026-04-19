@@ -143,6 +143,7 @@ export interface NewsSearchParams {
     region?: SourceRegion;
     timeFrame?: TimeFrame;
     maxResults?: number;
+    category?: string;
 }
 
 export interface ProjectConfig {
