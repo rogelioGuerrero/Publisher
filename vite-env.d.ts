@@ -3,6 +3,8 @@
 declare interface ImportMetaEnv {
   readonly VITE_GEMINI_API_KEY: string;
   readonly VITE_PEXELS_API_KEY?: string;
+  readonly VITE_GNEWS_API_KEY?: string;
+  readonly VITE_APINEWS_API_KEY?: string;
 }
 
 declare interface ImportMeta {

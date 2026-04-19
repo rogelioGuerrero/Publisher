@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem, RawSourceChunk } from "../types";
+import { NewsSource, UploadedFile, Language, ArticleLength, AdvancedSettings, ArticleTone, NewsArticle, MediaItem, RawSourceChunk, NewsArticleData, NewsSearchResult } from "../types";
 
 let geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
 let ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
@@ -109,6 +109,23 @@ function writeString(view: DataView, offset: number, string: string) {
   }
 }
 
+// Helper para formatear noticias externas para el prompt
+const formatExternalNewsForPrompt = (articles: NewsArticleData[]): string => {
+  if (!articles || articles.length === 0) return '';
+  
+  const formatted = articles.map((article, index) => {
+    return `--- NOTICIA ${index + 1} ---
+Título: ${article.title}
+Fuente: ${article.source.name}${article.source.url ? ` (${article.source.url})` : ''}
+Fecha: ${article.publishedAt}
+Contenido: ${article.content || article.description}
+URL: ${article.url}
+---`;
+  }).join('\n\n');
+  
+  return `FUENTES DE NOTICIAS CONSULTADAS:\n\n${formatted}\n\nINSTRUCCIÓN: Redacta un artículo periodístico usando la información de las fuentes anteriores. Cita las fuentes específicas usando el formato [Nombre de la Fuente](URL). NO inventes información que no esté en estas fuentes.`;
+};
+
 const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -127,7 +144,8 @@ export const generateNewsContent = async (
   file: UploadedFile | null,
   language: Language,
   length: ArticleLength,
-  settings: AdvancedSettings
+  settings: AdvancedSettings,
+  externalNews?: NewsArticleData[]
 ): Promise<{
   title: string;
   content: string;
@@ -178,9 +196,15 @@ export const generateNewsContent = async (
     (Provide a valid JSON object with "keywords" (array of strings) and "metaDescription" (string))`;
 
     if (mode === "document" && file) {
+      // Formato correcto para la SDK de Gemini: array de parts
       contents = [
-        { inlineData: { mimeType: file.mimeType, data: file.data } },
-        { text: `${systemPrompt}\n\nSource Material Provided. Instruction: ${input || "Create a story based on this document."}` }
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: file.mimeType, data: file.data } },
+            { text: `${systemPrompt}\n\nSource Material Provided. Instruction: ${input || "Create a story based on this document."}` }
+          ]
+        }
       ];
     } else {
       let searchContext = `Topic: "${input}".`;
@@ -210,8 +234,27 @@ export const generateNewsContent = async (
         searchContext += " STRICTLY use only verified, authoritative, and reputable news sources. Do not use blogs, forums, or tabloid sites.";
       }
 
-      contents = [{ text: `${systemPrompt}\n\n${searchContext}` }];
-      tools = [{ googleSearch: {} }];
+      // Si hay noticias externas, incluirlas en el contexto y NO usar googleSearch
+      if (externalNews && externalNews.length > 0) {
+        const newsContext = formatExternalNewsForPrompt(externalNews);
+        contents = [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\n${searchContext}\n\n${newsContext}` }]
+          }
+        ];
+        // NO usar googleSearch - las fuentes ya vienen de las APIs externas
+        tools = [];
+      } else {
+        // Fallback a googleSearch si no hay noticias externas
+        contents = [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\n${searchContext}` }]
+          }
+        ];
+        tools = [{ googleSearch: {} }];
+      }
     }
 
     const response = await client.models.generateContent({
@@ -243,23 +286,46 @@ export const generateNewsContent = async (
       console.warn("Failed to parse metadata JSON", e);
     }
 
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    // Si hay noticias externas, usar esas fuentes
+    // Si no, usar groundingMetadata (cuando se usa googleSearch)
+    let rawSources: { title: string; uri: string }[] = [];
+    let rawSourceChunks: RawSourceChunk[] = [];
 
-    const rawSourceChunks: RawSourceChunk[] = chunks.map((c: any) => ({
-      title: c.web?.title || null,
-      uri: c.web?.uri || null,
-      snippet: c.web?.snippet || null,
-      provider: c.web?.provider || null
-    }));
+    if (externalNews && externalNews.length > 0) {
+      // Convertir noticias externas a formato de fuentes
+      rawSources = externalNews
+        .filter(article => article.url && article.source.name)
+        .map(article => ({
+          title: article.source.name,
+          uri: article.url
+        }));
+      
+      rawSourceChunks = externalNews.map(article => ({
+        title: article.title,
+        uri: article.url,
+        snippet: article.description || article.content,
+        provider: article.source.name
+      }));
+    } else {
+      // Usar groundingMetadata de Google Search
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      
+      rawSourceChunks = chunks.map((c: any) => ({
+        title: c.web?.title || null,
+        uri: c.web?.uri || null,
+        snippet: c.web?.snippet || null,
+        provider: c.web?.provider || null
+      }));
 
-    const rawSources = rawSourceChunks
-      .map((chunk) => {
-        if (chunk.uri && chunk.title) {
-          return { title: chunk.title, uri: chunk.uri };
-        }
-        return null;
-      })
-      .filter((s): s is { title: string; uri: string } => s !== null);
+      rawSources = rawSourceChunks
+        .map((chunk) => {
+          if (chunk.uri && chunk.title) {
+            return { title: chunk.title, uri: chunk.uri };
+          }
+          return null;
+        })
+        .filter((s): s is { title: string; uri: string } => s !== null);
+    }
 
     const uniqueSources: NewsSource[] = [];
     const seenUris = new Set<string>();

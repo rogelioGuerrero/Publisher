@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ProjectConfig } from '../types';
+import { ProjectConfig, NewsApiProvider } from '../types';
 
 interface ProjectSettingsModalProps {
     isOpen: boolean;
@@ -18,6 +18,9 @@ const formatList = (items: string[]) => items.join('\n');
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOpen, initialConfig, onClose, onSave }) => {
     const [geminiKey, setGeminiKey] = useState('');
     const [pexelsKey, setPexelsKey] = useState('');
+    const [gnewsKey, setGnewsKey] = useState('');
+    const [apinewsKey, setApinewsKey] = useState('');
+    const [preferredProvider, setPreferredProvider] = useState<NewsApiProvider>('gnews');
     const [preferredDomains, setPreferredDomains] = useState('');
     const [blockedDomains, setBlockedDomains] = useState('');
 
@@ -25,6 +28,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
         if (!isOpen) return;
         setGeminiKey(initialConfig.geminiApiKey || '');
         setPexelsKey(initialConfig.pexelsApiKey || '');
+        setGnewsKey(initialConfig.gnewsApiKey || '');
+        setApinewsKey(initialConfig.apinewsApiKey || '');
+        setPreferredProvider(initialConfig.preferredNewsProvider || 'gnews');
         setPreferredDomains(formatList(initialConfig.preferredDomains || []));
         setBlockedDomains(formatList(initialConfig.blockedDomains || []));
     }, [isOpen, initialConfig]);
@@ -35,6 +41,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
         onSave({
             geminiApiKey: geminiKey.trim(),
             pexelsApiKey: pexelsKey.trim(),
+            gnewsApiKey: gnewsKey.trim(),
+            apinewsApiKey: apinewsKey.trim(),
+            preferredNewsProvider: preferredProvider,
             preferredDomains: parseList(preferredDomains),
             blockedDomains: parseList(blockedDomains)
         });
@@ -73,6 +82,45 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
                         />
                     </label>
+
+                    <div className="border-t border-slate-700 pt-4">
+                        <h4 className="text-sm font-semibold text-white mb-3">Fuentes de Noticias</h4>
+                        
+                        <label className="space-y-2">
+                            <span className="text-xs uppercase font-bold text-slate-500">GNews API Key</span>
+                            <input 
+                                type="text"
+                                value={gnewsKey}
+                                onChange={(e) => setGnewsKey(e.target.value)}
+                                placeholder="Ej: 2f8c4e..."
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                            />
+                            <p className="text-[11px] text-slate-500">Obtén tu clave gratuita en gnews.io</p>
+                        </label>
+
+                        <label className="space-y-2 mt-3">
+                            <span className="text-xs uppercase font-bold text-slate-500">APINews API Key (alternativa)</span>
+                            <input 
+                                type="text"
+                                value={apinewsKey}
+                                onChange={(e) => setApinewsKey(e.target.value)}
+                                placeholder="Ej: 9d2a1b..."
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                            />
+                        </label>
+
+                        <label className="space-y-2 mt-3">
+                            <span className="text-xs uppercase font-bold text-slate-500">Proveedor Preferido</span>
+                            <select
+                                value={preferredProvider}
+                                onChange={(e) => setPreferredProvider(e.target.value as NewsApiProvider)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                            >
+                                <option value="gnews">GNews (recomendado)</option>
+                                <option value="apinews">APINews</option>
+                            </select>
+                        </label>
+                    </div>
 
                     <label className="space-y-2">
                         <span className="text-xs uppercase font-bold text-slate-500">Dominios Confiables</span>

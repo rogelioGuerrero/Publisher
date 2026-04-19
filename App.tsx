@@ -6,6 +6,7 @@ import {
   generateSocialPost 
 } from './services/geminiService';
 import { searchPexels } from './services/pexelsService';
+import { setGNewsApiKey, setApiNewsApiKey, searchNews } from './services/newsApiService';
 import { 
   GenerationStep, 
   NewsArticle, 
@@ -154,14 +155,19 @@ export const App: React.FC = () => {
 
   const envGeminiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
   const envPexelsKey = import.meta.env.VITE_PEXELS_API_KEY || '';
+  const envGNewsKey = import.meta.env.VITE_GNEWS_API_KEY || '';
+  const envApiNewsKey = import.meta.env.VITE_APINEWS_API_KEY || '';
 
   const [projectConfig, setProjectConfig] = useState<ProjectConfig>(() => {
     if (typeof window === 'undefined') {
       return {
         geminiApiKey: envGeminiKey,
         pexelsApiKey: envPexelsKey,
+        gnewsApiKey: envGNewsKey,
+        apinewsApiKey: envApiNewsKey,
         preferredDomains: getRegionPreferredDomains('world'),
-        blockedDomains: []
+        blockedDomains: [],
+        preferredNewsProvider: 'gnews'
       };
     }
     try {
@@ -171,8 +177,11 @@ export const App: React.FC = () => {
         return {
           geminiApiKey: parsed.geminiApiKey || envGeminiKey,
           pexelsApiKey: parsed.pexelsApiKey || envPexelsKey,
+          gnewsApiKey: parsed.gnewsApiKey || envGNewsKey,
+          apinewsApiKey: parsed.apinewsApiKey || envApiNewsKey,
           preferredDomains: parsed.preferredDomains || getRegionPreferredDomains('world'),
-          blockedDomains: parsed.blockedDomains || []
+          blockedDomains: parsed.blockedDomains || [],
+          preferredNewsProvider: parsed.preferredNewsProvider || 'gnews'
         };
       }
     } catch (e) {
@@ -181,8 +190,11 @@ export const App: React.FC = () => {
     return {
       geminiApiKey: envGeminiKey,
       pexelsApiKey: envPexelsKey,
+      gnewsApiKey: envGNewsKey,
+      apinewsApiKey: envApiNewsKey,
       preferredDomains: getRegionPreferredDomains('world'),
-      blockedDomains: []
+      blockedDomains: [],
+      preferredNewsProvider: 'gnews'
     };
   });
   const [showProjectSettings, setShowProjectSettings] = useState(false);
@@ -274,6 +286,12 @@ export const App: React.FC = () => {
     }
     if (projectConfig.pexelsApiKey) {
       setPexelsApiKey(projectConfig.pexelsApiKey);
+    }
+    if (projectConfig.gnewsApiKey) {
+      setGNewsApiKey(projectConfig.gnewsApiKey);
+    }
+    if (projectConfig.apinewsApiKey) {
+      setApiNewsApiKey(projectConfig.apinewsApiKey);
     }
     setAdvancedSettings(prev => ({
       ...prev,
@@ -433,11 +451,44 @@ export const App: React.FC = () => {
 
     setError(null);
     setCurrentStep(GenerationStep.TEXT_SEARCH);
-    setStatusMessage("Investigando fuentes y redactando...");
 
     try {
+      let externalNews = undefined;
+
+      // Si es modo topic, buscar noticias en APIs externas primero
+      if (inputMode === 'topic') {
+        const hasNewsApi = projectConfig.gnewsApiKey || projectConfig.apinewsApiKey;
+        
+        if (hasNewsApi) {
+          setStatusMessage("Consultando fuentes de noticias...");
+          
+          try {
+            const newsResult = await searchNews({
+              query: inputValue,
+              language: selectedLanguage,
+              region: advancedSettings.sourceRegion,
+              timeFrame: advancedSettings.timeFrame,
+              maxResults: 10
+            }, projectConfig.preferredNewsProvider);
+            
+            externalNews = newsResult.articles;
+            
+            if (newsResult.usedFallback) {
+              console.log(`Usando fallback: ${newsResult.provider}`);
+            }
+            
+            console.log(`Encontradas ${externalNews.length} noticias de ${newsResult.provider}`);
+          } catch (newsErr) {
+            console.warn("Error buscando noticias externas:", newsErr);
+            // Continuar sin noticias externas - usará fallback de Google Search
+          }
+        }
+      }
+
+      setStatusMessage("Redactando artículo con Gemini...");
+
       const textData = await generateNewsContent(
-          inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings
+          inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings, externalNews
       );
       
       const partialArticle: NewsArticle = {
@@ -463,7 +514,7 @@ export const App: React.FC = () => {
       setStatusMessage('');
     } catch (err) {
       console.error(err);
-      setError("Ocurrió un error inesperado. Verifica tu API Key.");
+      setError("Ocurrió un error inesperado. Verifica tus API Keys.");
       setCurrentStep(GenerationStep.INPUT);
       setStatusMessage('');
     }
