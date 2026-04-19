@@ -5,7 +5,8 @@ import {
   NewsSource, 
   RawSourceChunk, 
   UploadedFile,
-  NewsArticle
+  NewsArticle,
+  NewsArticleData
 } from "../types";
 
 let deepseekApiKey = import.meta.env.VITE_DEEPSEEK_API_KEY || "";
@@ -43,12 +44,30 @@ const fetchDeepseek = async (messages: any[], temperature = 0.7) => {
   return data.choices[0].message.content;
 };
 
+// Helper para formatear noticias externas para el prompt
+const formatExternalNewsForDeepseek = (articles: NewsArticleData[]): string => {
+  if (!articles || articles.length === 0) return '';
+  
+  const formatted = articles.map((article, index) => {
+    return `--- NOTICIA ${index + 1} ---
+Título: ${article.title}
+Fuente: ${article.source.name}${article.source.url ? ` (${article.source.url})` : ''}
+Fecha: ${article.publishedAt}
+Contenido: ${article.content || article.description}
+URL: ${article.url}
+---`;
+  }).join('\n\n');
+  
+  return `FUENTES DE NOTICIAS CONSULTADAS (usa estas fuentes para escribir el artículo, cítalas específicamente con formato [Nombre](URL)):\n\n${formatted}`;
+};
+
 export const generateArticleWithDeepseek = async (
   input: string,
   language: Language,
   length: ArticleLength,
   settings: AdvancedSettings,
-  mode: "topic" | "document" = "topic"
+  mode: "topic" | "document" = "topic",
+  externalNews?: NewsArticleData[]
 ): Promise<{
   title: string;
   content: string;
@@ -74,7 +93,8 @@ export const generateArticleWithDeepseek = async (
   ${settings.includeStats ? "- MUST include specific data, statistics, percentages, or financial figures." : ""}
   ${settings.includeCounterArguments ? "- MUST include a counter-argument, alternative perspective, or risks involved to ensure balance." : ""}
   
-  Task: Write a news article following these constraints. Use your internal knowledge to provide accurate and verifiable information.
+  Task: Write a news article following these constraints.
+  ${externalNews && externalNews.length > 0 ? "MANDATORY: Use ONLY the information provided in the FUENTES DE NOTICIAS CONSULTADAS section below. Cite specific sources with [Source Name](URL) format. DO NOT use your internal knowledge or hallucinate facts not present in the provided sources." : "Use your internal knowledge to provide accurate and verifiable information."}
   
   Structure the response with these EXACT separators:
   |||HEADLINE|||
@@ -86,7 +106,12 @@ export const generateArticleWithDeepseek = async (
   |||METADATA|||
   (Provide a valid JSON object with "keywords" (array of strings) and "metaDescription" (string))`;
 
-  const userPrompt = `Topic/Input: ${input}`;
+  let userPrompt = `Topic/Input: ${input}`;
+  
+  // Si hay noticias externas, incluirlas en el prompt
+  if (externalNews && externalNews.length > 0) {
+    userPrompt += `\n\n${formatExternalNewsForDeepseek(externalNews)}`;
+  }
 
   const fullText = await fetchDeepseek([
     { role: "system", content: systemPrompt },

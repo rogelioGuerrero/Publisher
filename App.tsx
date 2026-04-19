@@ -471,6 +471,29 @@ export const App: React.FC = () => {
       let keywords: string[] = [];
       let metaDescription = "";
 
+      // Buscar noticias externas PRIMERO (antes de elegir LLM)
+      let externalNews = undefined;
+      
+      if (inputMode === 'topic' && (projectConfig.gnewsApiKey || projectConfig.apinewsApiKey)) {
+        setStatusMessage("Consultando fuentes de noticias...");
+        
+        try {
+          const newsResult = await searchNews({
+            query: inputValue,
+            language: selectedLanguage,
+            region: advancedSettings.sourceRegion,
+            timeFrame: advancedSettings.timeFrame,
+            maxResults: 10
+          }, projectConfig.preferredNewsProvider || 'gnews');
+          
+          externalNews = newsResult.articles;
+          console.log(`Encontradas ${externalNews.length} noticias de ${newsResult.provider}`);
+        } catch (newsErr) {
+          console.warn("Error buscando noticias externas:", newsErr);
+          // Continuar sin noticias externas
+        }
+      }
+
       if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
         setStatusMessage("Redactando artículo con DeepSeek...");
         const result = await generateArticleWithDeepseek(
@@ -478,7 +501,8 @@ export const App: React.FC = () => {
           selectedLanguage, 
           selectedLength, 
           advancedSettings,
-          inputMode
+          inputMode,
+          externalNews  // <-- AHORA DeepSeek recibe las noticias
         );
 
         title = result.title;
@@ -486,31 +510,23 @@ export const App: React.FC = () => {
         imagePrompt = result.imagePrompt;
         keywords = result.keywords;
         metaDescription = result.metaDescription;
-      } else {
-        // Default to Gemini con búsqueda de noticias externas
-        let externalNews = undefined;
-
-        // Si es modo topic y tenemos APIs de noticias configuradas
-        if (inputMode === 'topic' && (projectConfig.gnewsApiKey || projectConfig.apinewsApiKey)) {
-          setStatusMessage("Consultando fuentes de noticias...");
-          
-          try {
-            const newsResult = await searchNews({
-              query: inputValue,
-              language: selectedLanguage,
-              region: advancedSettings.sourceRegion,
-              timeFrame: advancedSettings.timeFrame,
-              maxResults: 10
-            }, projectConfig.preferredNewsProvider || 'gnews');
-            
-            externalNews = newsResult.articles;
-            console.log(`Encontradas ${externalNews.length} noticias de ${newsResult.provider}`);
-          } catch (newsErr) {
-            console.warn("Error buscando noticias externas:", newsErr);
-            // Continuar sin noticias externas - usará fallback de Google Search
-          }
+        // Usar las fuentes de las noticias externas si están disponibles
+        if (externalNews && externalNews.length > 0) {
+          sources = externalNews
+            .filter(article => article.url && article.source.name)
+            .map(article => ({
+              title: article.source.name,
+              uri: article.url
+            }));
+          rawSources = externalNews.map(article => ({
+            title: article.title,
+            uri: article.url,
+            snippet: article.description || article.content,
+            provider: article.source.name
+          }));
         }
-
+      } else {
+        // Gemini con noticias externas
         setStatusMessage("Redactando artículo con Gemini...");
         const textData = await generateNewsContent(
             inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings, externalNews

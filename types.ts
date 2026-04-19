@@ -121,6 +121,30 @@ export type ImageModel = 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview'
 
 export type NewsApiProvider = 'gnews' | 'apinews';
 
+export interface NewsSourceInfo {
+    name: string;
+    url: string;
+}
+
+export interface NewsArticleData {
+    title: string;
+    description: string;
+    content: string;
+    url: string;
+    imageUrl: string | null;
+    publishedAt: string;
+    source: NewsSourceInfo;
+    provider: NewsApiProvider;
+}
+
+export interface NewsSearchParams {
+    query: string;
+    language?: Language;
+    region?: SourceRegion;
+    timeFrame?: TimeFrame;
+    maxResults?: number;
+}
+
 export interface ProjectConfig {
     activeProvider: AIProvider;
     geminiApiKey: string;
