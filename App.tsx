@@ -170,9 +170,12 @@ export const App: React.FC = () => {
       geminiApiKey: envGeminiKey,
       deepseekApiKey: envDeepseekKey,
       pexelsApiKey: envPexelsKey,
+      gnewsApiKey: envGNewsKey,
+      apinewsApiKey: envApiNewsKey,
       preferredDomains: getRegionPreferredDomains('world'),
       blockedDomains: [],
-      imageModel: 'gemini-2.5-flash-image'
+      imageModel: 'gemini-2.5-flash-image',
+      preferredNewsProvider: 'gnews'
     };
 
     if (typeof window === 'undefined') {
@@ -484,10 +487,33 @@ export const App: React.FC = () => {
         keywords = result.keywords;
         metaDescription = result.metaDescription;
       } else {
-        // Default to Gemini
+        // Default to Gemini con búsqueda de noticias externas
+        let externalNews = undefined;
+
+        // Si es modo topic y tenemos APIs de noticias configuradas
+        if (inputMode === 'topic' && (projectConfig.gnewsApiKey || projectConfig.apinewsApiKey)) {
+          setStatusMessage("Consultando fuentes de noticias...");
+          
+          try {
+            const newsResult = await searchNews({
+              query: inputValue,
+              language: selectedLanguage,
+              region: advancedSettings.sourceRegion,
+              timeFrame: advancedSettings.timeFrame,
+              maxResults: 10
+            }, projectConfig.preferredNewsProvider || 'gnews');
+            
+            externalNews = newsResult.articles;
+            console.log(`Encontradas ${externalNews.length} noticias de ${newsResult.provider}`);
+          } catch (newsErr) {
+            console.warn("Error buscando noticias externas:", newsErr);
+            // Continuar sin noticias externas - usará fallback de Google Search
+          }
+        }
+
         setStatusMessage("Redactando artículo con Gemini...");
         const textData = await generateNewsContent(
-            inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings
+            inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings, externalNews
         );
         title = textData.title;
         content = textData.content;
