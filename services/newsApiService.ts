@@ -76,8 +76,19 @@ const REGION_COUNTRY_MAP: Record<string, string[]> = {
   'asia': ['jp', 'cn', 'kr', 'in', 'sg']
 };
 
+// Detectar si estamos en producción (Netlify) o desarrollo
+const getProxyUrl = () => {
+  // En Netlify, usar la función serverless
+  if (window.location.hostname.includes('netlify.app') || 
+      window.location.hostname === 'localhost') {
+    return '/.netlify/functions/news-proxy';
+  }
+  // Fallback para otros entornos
+  return '/.netlify/functions/news-proxy';
+};
+
 /**
- * Busca noticias en GNews API
+ * Busca noticias en GNews API vía proxy (evita CORS)
  * https://gnews.io/docs/
  */
 export const searchGNews = async (params: NewsSearchParams): Promise<NewsArticleData[]> => {
@@ -92,22 +103,18 @@ export const searchGNews = async (params: NewsSearchParams): Promise<NewsArticle
       category
     } = params;
 
-    // Construir URL base
-    let url: string;
+    // Construir URL del proxy
+    const proxyUrl = getProxyUrl();
     const searchParams = new URLSearchParams();
+    searchParams.append('provider', 'gnews');
     searchParams.append('apikey', key);
     searchParams.append('max', maxResults.toString());
 
     if (query) {
-      // Búsqueda por tema
-      url = 'https://gnews.io/api/v4/search';
       searchParams.append('q', query);
-    } else {
-      // Top headlines
-      url = 'https://gnews.io/api/v4/top-headlines';
-      if (category) {
-        searchParams.append('category', category);
-      }
+    }
+    if (category) {
+      searchParams.append('category', category);
     }
 
     // Idioma
@@ -117,7 +124,6 @@ export const searchGNews = async (params: NewsSearchParams): Promise<NewsArticle
     // País/Región
     const countries = REGION_COUNTRY_MAP[region];
     if (countries && countries.length > 0) {
-      // GNews solo permite un país, usamos el primero o hacemos múltiples requests
       searchParams.append('country', countries[0]);
     }
 
@@ -127,10 +133,9 @@ export const searchGNews = async (params: NewsSearchParams): Promise<NewsArticle
       searchParams.append('from', fromDate);
     }
 
-    // Expandir contenido para obtener más texto
     searchParams.append('expand', 'content');
 
-    const fullUrl = `${url}?${searchParams.toString()}`;
+    const fullUrl = `${proxyUrl}?${searchParams.toString()}`;
     
     const response = await fetch(fullUrl);
     
@@ -243,8 +248,8 @@ export const getGNewsFromYesterday = async (
 };
 
 /**
- * Busca noticias en APINews (NewsAPI alternative)
- * https://apinews.io/
+ * Busca noticias en APINews (NewsAPI) vía proxy (evita CORS)
+ * https://newsapi.org/
  */
 export const searchApiNews = async (params: NewsSearchParams): Promise<NewsArticleData[]> => {
   try {
@@ -257,13 +262,14 @@ export const searchApiNews = async (params: NewsSearchParams): Promise<NewsArtic
       maxResults = 10
     } = params;
 
+    const proxyUrl = getProxyUrl();
     const searchParams = new URLSearchParams();
+    searchParams.append('provider', 'apinews');
     searchParams.append('apiKey', key);
     
     if (query) {
       searchParams.append('q', query);
     } else {
-      // Si no hay query, buscar noticias generales
       searchParams.append('q', 'news');
     }
 
@@ -282,12 +288,11 @@ export const searchApiNews = async (params: NewsSearchParams): Promise<NewsArtic
       searchParams.append('from', fromDate);
     }
 
-    // Ordenar por relevancia y fecha
     searchParams.append('sortBy', 'publishedAt');
 
-    const url = `https://newsapi.org/v2/everything?${searchParams.toString()}`;
+    const fullUrl = `${proxyUrl}?${searchParams.toString()}`;
     
-    const response = await fetch(url);
+    const response = await fetch(fullUrl);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
