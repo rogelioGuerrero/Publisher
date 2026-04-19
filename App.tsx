@@ -473,12 +473,21 @@ export const App: React.FC = () => {
 
       // Buscar noticias externas PRIMERO (antes de elegir LLM)
       let externalNews: any[] | undefined = undefined;
+      let newsError: string | null = null;
       
       console.log('[DEBUG] Modo:', inputMode);
       console.log('[DEBUG] GNews Key existe:', !!projectConfig.gnewsApiKey);
       console.log('[DEBUG] APINews Key existe:', !!projectConfig.apinewsApiKey);
       
-      if (inputMode === 'topic' && (projectConfig.gnewsApiKey || projectConfig.apinewsApiKey)) {
+      if (inputMode === 'topic') {
+        // Verificar que tengamos al menos una API key de noticias
+        if (!projectConfig.gnewsApiKey && !projectConfig.apinewsApiKey) {
+          setError("Se requiere una API key de GNews o NewsAPI para buscar noticias. Agrega tu key en Configuración del Proyecto.");
+          setCurrentStep(GenerationStep.INPUT);
+          setStatusMessage('');
+          return;
+        }
+        
         setStatusMessage("Consultando fuentes de noticias...");
         console.log('[DEBUG] Iniciando búsqueda de noticias...');
         
@@ -494,11 +503,23 @@ export const App: React.FC = () => {
           externalNews = newsResult.articles;
           console.log(`[DEBUG] ✓ Encontradas ${externalNews?.length || 0} noticias de ${newsResult.provider}`);
           console.log('[DEBUG] Primeras 3 noticias:', externalNews?.slice(0, 3).map((a: any) => a.title));
-        } catch (newsErr) {
+          
+          // Si no se encontraron noticias, es un error - no podemos generar artículo sin fuentes
+          if (!externalNews || externalNews.length === 0) {
+            newsError = `No se encontraron noticias sobre "${inputValue}" en las fuentes configuradas. Intenta con otro tema o verifica tus API keys.`;
+          }
+        } catch (newsErr: any) {
           console.error('[DEBUG] ✗ Error buscando noticias:', newsErr);
+          newsError = newsErr.message || "Error al consultar fuentes de noticias. Verifica tu conexión y API keys.";
         }
-      } else {
-        console.log('[DEBUG] Saltando búsqueda de noticias - modo documento o sin API keys');
+      }
+      
+      // Si hubo error obteniendo noticias, mostrar error y NO generar artículo inventado
+      if (newsError) {
+        setError(newsError);
+        setCurrentStep(GenerationStep.INPUT);
+        setStatusMessage('');
+        return;
       }
       
       console.log('[DEBUG] externalNews al final:', externalNews?.length || 0, 'artículos');
