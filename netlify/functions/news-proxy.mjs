@@ -18,6 +18,10 @@ export default async (request, context) => {
   const url = new URL(request.url);
   const provider = url.searchParams.get('provider') || 'gnews';
   
+  console.log(`[PROXY] Request: ${request.method} ${url.pathname}`);
+  console.log(`[PROXY] Provider: ${provider}`);
+  console.log(`[PROXY] Query params:`, Object.fromEntries(url.searchParams.entries()));
+  
   try {
     let targetUrl;
     
@@ -55,6 +59,7 @@ export default async (request, context) => {
       if (country) params.append('country', country);
       
       targetUrl = `${endpoint}?${params.toString()}`;
+      console.log(`[PROXY] GNews URL: ${targetUrl.replace(apiKey, '***')}`);
       
     } else if (provider === 'apinews') {
       // Construir URL de NewsAPI
@@ -81,6 +86,7 @@ export default async (request, context) => {
       if (from) params.append('from', from);
       
       targetUrl = `https://newsapi.org/v2/everything?${params.toString()}`;
+      console.log(`[PROXY] APINews URL: ${targetUrl.replace(apiKey, '***')}`);
       
     } else {
       return new Response(
@@ -100,10 +106,12 @@ export default async (request, context) => {
     
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`API externa error: ${response.status}`, targetUrl.replace(apiKey, '***'), errorText.substring(0, 200));
       return new Response(
         JSON.stringify({ 
           error: 'Error desde API externa',
           status: response.status,
+          targetUrl: targetUrl.replace(apiKey, '***'),
           details: errorText
         }),
         { status: response.status, headers: corsHeaders }
