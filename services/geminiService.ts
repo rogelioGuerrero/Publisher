@@ -203,11 +203,29 @@ export const generateNewsContent = async (
         userPrompt += ` Focus on events from the last ${settings.timeFrame} if possible.`;
       }
 
-      contents = [{ text: `${systemPrompt}\n\n${userPrompt}` }];
+      // Si hay noticias externas, incluirlas en el contexto y NO usar googleSearch
+      if (externalNews && externalNews.length > 0) {
+        const newsContext = formatExternalNewsForPrompt(externalNews);
+        contents = [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\n${userPrompt}\n\n${newsContext}` }]
+          }
+        ];
+        // NO usar googleSearch - las fuentes ya vienen de las APIs externas
+      } else {
+        // Fallback: solo el prompt sin noticias externas
+        contents = [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+          }
+        ];
+      }
     }
 
     const response = await client.models.generateContent({
-      model: "gemini-2.5-flash", // Use balanced flash model that tends to include citations
+      model: "gemini-2.5-flash",
       contents
     });
 
