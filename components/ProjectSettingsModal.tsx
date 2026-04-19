@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ProjectConfig, AIProvider, ImageModel } from '../types';
+import { ProjectConfig, AIProvider, ImageModel, NewsApiProvider } from '../types';
 
 interface ProjectSettingsModalProps {
     isOpen: boolean;
@@ -114,6 +114,43 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
                                 placeholder="Ej: 563492ad6f91700001000001..."
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
                             />
+                        </label>
+
+                        <label className="space-y-2 md:col-span-2">
+                            <span className="text-xs uppercase font-bold text-slate-500">Proveedor de Noticias Preferido</span>
+                            <select 
+                                value={preferredProvider}
+                                onChange={(e) => setPreferredProvider(e.target.value as NewsApiProvider)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                            >
+                                <option value="gnews">GNews (gnews.io) - Recomendado</option>
+                                <option value="apinews">NewsAPI (newsapi.org)</option>
+                            </select>
+                            <p className="text-xs text-slate-500">Se usará como fuente principal para investigar noticias</p>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-xs uppercase font-bold text-slate-500">GNews API Key</span>
+                            <input 
+                                type="text"
+                                value={gnewsKey}
+                                onChange={(e) => setGnewsKey(e.target.value)}
+                                placeholder="Ej: 8c8bbed590d100e5c1544795cef4048d"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                            />
+                            <p className="text-xs text-slate-500">Obtén tu key gratis en gnews.io</p>
+                        </label>
+
+                        <label className="space-y-2">
+                            <span className="text-xs uppercase font-bold text-slate-500">NewsAPI Key</span>
+                            <input 
+                                type="text"
+                                value={apinewsKey}
+                                onChange={(e) => setApinewsKey(e.target.value)}
+                                placeholder="Ej: 8ca958f2043b40b9a5dacf89fa6d4daa"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                            />
+                            <p className="text-xs text-slate-500">Obtén tu key gratis en newsapi.org</p>
                         </label>
                     </div>
 
