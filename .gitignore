@@ -25,3 +25,9 @@ dist-ssr
 
 # Local Netlify folder
 .netlify
+
+# Local POC files (LM Studio integration)
+test-local-llm-poc.mjs
+services/localService.ts
+test-news-apis.mjs
+.env.example

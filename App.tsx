@@ -1,15 +1,21 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { 
-  generateNewsContent, 
-  generateNewsImages, 
-  generateNewsAudio, 
-  generateSocialPost 
+import {
+  generateNewsContent,
+  generateNewsImages,
+  generateNewsAudio,
+  generateSocialPost
 } from './services/geminiService';
-import { 
-  generateArticleWithDeepseek, 
-  generateSocialPostWithDeepseek, 
-  setDeepseekApiKey 
+import {
+  generateArticleWithDeepseek,
+  generateSocialPostWithDeepseek,
+  setDeepseekApiKey
 } from './services/deepseekService';
+import {
+  generateArticleWithLocal,
+  generateSocialPostWithLocal,
+  refineSearchQuery,
+  setLocalModel
+} from './services/localService';
 import { searchPexels } from './services/pexelsService';
 import { setGNewsApiKey, setApiNewsApiKey, searchNews } from './services/newsApiService';
 import { 
@@ -490,21 +496,56 @@ export const App: React.FC = () => {
         
         setStatusMessage("Consultando fuentes de noticias...");
         console.log('[DEBUG] Iniciando búsqueda de noticias...');
-        
+
+        // Query refinement: siempre intentar optimizar la búsqueda antes de consultar APIs de noticias
+        // Este proceso es independiente del proveedor de IA usado para generar el artículo
+        let searchQuery = inputValue;
+        try {
+          setStatusMessage("Optimizando consulta para búsqueda de noticias...");
+          const refined = await refineSearchQuery(inputValue, selectedLanguage);
+          searchQuery = refined.primaryQuery;
+          console.log('[DEBUG] Query original:', inputValue);
+          console.log('[DEBUG] Query refinado:', searchQuery);
+        } catch (refineErr) {
+          console.warn('[DEBUG] Query refinement falló, usando query original:', refineErr);
+          searchQuery = inputValue;
+        }
+
         try {
           const newsResult = await searchNews({
-            query: inputValue,
+            query: searchQuery,
             language: selectedLanguage,
             region: advancedSettings.sourceRegion,
             timeFrame: advancedSettings.timeFrame,
             maxResults: 10
           }, projectConfig.preferredNewsProvider || 'gnews');
-          
+
           externalNews = newsResult.articles;
           console.log(`[DEBUG] ✓ Encontradas ${externalNews?.length || 0} noticias de ${newsResult.provider}`);
           console.log('[DEBUG] Primeras 3 noticias:', externalNews?.slice(0, 3).map((a: any) => a.title));
-          
-          // Si no se encontraron noticias, es un error - no podemos generar artículo sin fuentes
+
+          // Si no se encontraron noticias con query refinado, intentar con query original
+          if ((!externalNews || externalNews.length === 0) && searchQuery !== inputValue) {
+            console.log('[DEBUG] No hay resultados con query refinado, intentando con query original...');
+            try {
+              const fallbackResult = await searchNews({
+                query: inputValue,
+                language: selectedLanguage,
+                region: advancedSettings.sourceRegion,
+                timeFrame: advancedSettings.timeFrame,
+                maxResults: 10
+              }, projectConfig.preferredNewsProvider || 'gnews');
+
+              if (fallbackResult.articles && fallbackResult.articles.length > 0) {
+                externalNews = fallbackResult.articles;
+                console.log(`[DEBUG] ✓ Encontradas ${externalNews?.length || 0} noticias con query original`);
+              }
+            } catch (fallbackErr) {
+              console.warn('[DEBUG] Fallback con query original también falló:', fallbackErr);
+            }
+          }
+
+          // Si aún no hay resultados, mostrar error
           if (!externalNews || externalNews.length === 0) {
             newsError = `No se encontraron noticias sobre "${inputValue}" en las fuentes configuradas. Intenta con otro tema o verifica tus API keys.`;
           }
@@ -524,15 +565,16 @@ export const App: React.FC = () => {
       
       console.log('[DEBUG] externalNews al final:', externalNews?.length || 0, 'artículos');
 
-      if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
-        setStatusMessage("Redactando artículo con DeepSeek...");
-        const result = await generateArticleWithDeepseek(
-          inputValue, 
-          selectedLanguage, 
-          selectedLength, 
+      if (projectConfig.activeProvider === 'local') {
+        setStatusMessage("Redactando artículo con LLM local...");
+        const result = await generateArticleWithLocal(
+          inputValue,
+          selectedLanguage,
+          selectedLength,
           advancedSettings,
           inputMode,
-          externalNews  // <-- AHORA DeepSeek recibe las noticias
+          externalNews,
+          selectedFile
         );
 
         title = result.title;
@@ -540,7 +582,24 @@ export const App: React.FC = () => {
         imagePrompt = result.imagePrompt;
         keywords = result.keywords;
         metaDescription = result.metaDescription;
-        // Usar las fuentes de las noticias externas si están disponibles
+        sources = result.sources;
+        rawSources = result.rawSourceChunks;
+      } else if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
+        setStatusMessage("Redactando artículo con DeepSeek...");
+        const result = await generateArticleWithDeepseek(
+          inputValue,
+          selectedLanguage,
+          selectedLength,
+          advancedSettings,
+          inputMode,
+          externalNews
+        );
+
+        title = result.title;
+        content = result.content;
+        imagePrompt = result.imagePrompt;
+        keywords = result.keywords;
+        metaDescription = result.metaDescription;
         if (externalNews && externalNews.length > 0) {
           sources = externalNews
             .filter(article => article.url && article.source.name)
@@ -556,7 +615,6 @@ export const App: React.FC = () => {
           }));
         }
       } else {
-        // Gemini con noticias externas
         setStatusMessage("Redactando artículo con Gemini...");
         const textData = await generateNewsContent(
             inputValue, inputMode, selectedFile, selectedLanguage, selectedLength, advancedSettings, externalNews
@@ -806,7 +864,9 @@ export const App: React.FC = () => {
       setIsGeneratingSocial(true);
       try {
         let content = "";
-        if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
+        if (projectConfig.activeProvider === 'local') {
+          content = await generateSocialPostWithLocal(article, platform);
+        } else if (projectConfig.activeProvider === 'deepseek' && projectConfig.deepseekApiKey) {
           content = await generateSocialPostWithDeepseek(article, platform);
         } else {
           content = await generateSocialPost(article, platform);
