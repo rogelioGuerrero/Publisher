@@ -115,7 +115,7 @@ export interface SourceGroup {
     links: { title: string; uri: string }[];
 }
 
-export type AIProvider = 'gemini' | 'deepseek';
+export type AIProvider = 'gemini' | 'deepseek' | 'local';
 
 export type ImageModel = 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview' | 'imagen-3-fast-generate-001';
 

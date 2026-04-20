@@ -73,13 +73,14 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({ isOp
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <label className="space-y-2 md:col-span-2">
                             <span className="text-xs uppercase font-bold text-slate-500">Proveedor de IA Activo</span>
-                            <select 
+                            <select
                                 value={activeProvider}
                                 onChange={(e) => setActiveProvider(e.target.value as AIProvider)}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
                             >
                                 <option value="gemini">Google Gemini</option>
                                 <option value="deepseek">DeepSeek</option>
+                                <option value="local">LM Studio Local (http://192.168.1.179:1234)</option>
                             </select>
                         </label>
 
